@@ -1,4 +1,4 @@
-from flask import Flask
+from flask import Flask, jsonify
 from flask_cors import CORS
 from config import Config
 import logging
@@ -6,6 +6,8 @@ from models import db, bcrypt
 from routes import api as api_blueprint
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
+from flask_jwt_extended import JWTManager
+
 
 limiter = Limiter(key_func=get_remote_address)
 
@@ -14,6 +16,17 @@ def create_app():
 
     app = Flask(__name__) # __name__ variable that takes the name of the file (in this case app.py)
     app.config.from_object(Config) # from_object is safe, allows for configuring the flask application from the Config class
+    jwt = JWTManager(app) 
+
+    @jwt.token_verification_loader
+    def verify_token(header_data, payload):
+        print(f"🔍 Verifying token: {header_data} | {payload}")
+        return True  # Temporary for debugging
+
+    @jwt.invalid_token_loader
+    def handle_invalid_token(error):
+        print(f"❌ Invalid token: {error}")
+        return jsonify({"error": "Invalid token"}), 422
 
     CORS(app, resources={
         r"/api/*": {

@@ -1,6 +1,8 @@
 from flask import Blueprint, request, jsonify, session
 from models import db, User, Couple, bcrypt 
 import re  
+from flask_jwt_extended import create_access_token, create_refresh_token
+from flask_jwt_extended import jwt_required, get_jwt_identity
 
 
 
@@ -81,8 +83,13 @@ def register():
         
         db.session.add(new_user)
         db.session.commit()
-        
+
+        access_token = create_access_token(identity=str(new_user.id))  # Convert to string
+        refresh_token = create_refresh_token(identity=str(new_user.id))
+            
         return jsonify({
+            'access_token': access_token,
+            'refresh_token': refresh_token,
             'message': 'Joined couple',
             'user_id': new_user.id,
             'couple_id': couple.id
@@ -107,8 +114,15 @@ def register():
 
         session['user_id'] = new_user.id 
 
+        access_token = create_access_token(identity=str(new_user.id))  # Convert to string
+        refresh_token = create_refresh_token(identity=str(new_user.id))
+            
+    
+
     
         return jsonify({
+            'access_token': access_token,
+            'refresh_token': refresh_token,
             'message': 'Couple created',
             'user_id': new_user.id,
             'couple_id': new_couple.id,
@@ -130,8 +144,13 @@ def login():
         
         session['user_id'] = user.id 
         session.permanent = True
+
+        access_token = create_access_token(identity=str(user.id))  # Convert to string
+        refresh_token = create_refresh_token(identity=str(user.id))
             
         return jsonify({
+            'access_token': access_token,
+            'refresh_token': refresh_token,
             'user_id': user.id,
             'couple_id': user.couple_id
         }), 200
@@ -143,29 +162,47 @@ def login():
     
 
 @api.route('/couple', methods=['GET'])
+@jwt_required()
 def get_couple_details():
-    user_id = session.get('user_id')
-    if not user_id:
-        return jsonify({'error': 'Unauthorized'}), 401
-    
-    user = User.query.get(user_id)
-    if not user:
-        return jsonify({'error': 'User not found'}), 404
-    
-    couple = Couple.query.get(user.couple_id)
-    return jsonify({
-        'couple_name': couple.couple_name,
-        'level': couple.level,
-        'points': couple.points,
-        'invitation_code': couple.invitation_code,
-        'users': [user.name for user in couple.users]
-    }), 200
+    try:
+  
+        user_id = get_jwt_identity()
+        print(f"🔑 User ID from JWT: {user_id} ({type(user_id)})")
+        
+        user = User.query.get(user_id)
+        if not user:
+            print(f"❌ User not found: {user_id}")
+            return jsonify({'error': 'User not found'}), 404
+        
+        print(f"👫 User couple ID: {user.couple_id}")
+        couple = Couple.query.get(user.couple_id)
+        if not couple:
+            print(f"❌ Couple not found for user {user_id}")
+            return jsonify({'error': 'Couple not found'}), 404
+        
+        print(f"✅ Successfully retrieved couple: {couple.id}")
+
+        print(couple.couple_name, couple.level, couple.points, couple.invitation_code)
+        return jsonify({
+            'couple_name': couple.couple_name,
+            'level': couple.level,
+            'points': couple.points,
+            'invitation_code': couple.invitation_code,
+            'users': [user.name for user in couple.users]
+        }), 200
+
+    except Exception as e:
+        print(f"💥 Unexpected error: {str(e)}")
+        return jsonify({'error': 'Internal server error'}), 500
 
 @api.route('/change-password', methods=['PUT'])
+@jwt_required()
 def change_password():
     data = request.get_json()
-    user_id = session.get('user_id')
-    
+    user_id = get_jwt_identity()  # Get user ID from JWT
+
+    print(user_id)
+
     if not user_id:
         return jsonify({'error': 'Unauthorized'}), 401
     
@@ -183,3 +220,16 @@ def change_password():
     db.session.commit()
     
     return jsonify({'message': 'Password updated successfully'}), 200
+
+@api.route('/refresh', methods=['POST'])
+@jwt_required(refresh=True)  # This validates the refresh token
+def refresh():
+    try:
+        current_user = get_jwt_identity()
+        return jsonify({
+            'access_token': create_access_token(identity=current_user)
+        }), 200
+    except Exception as e:
+        # Specific error for expired refresh token
+        return jsonify({"error": "Refresh token expired"}), 401
+    

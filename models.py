@@ -141,6 +141,8 @@ class Mission(db.Model):
     couple_id = db.Column(db.Integer, db.ForeignKey('couples.id'))
     missions = db.Column(db.JSON, nullable=False)
     created_by = db.Column(db.Integer, db.ForeignKey('users.id'))
+    category = db.Column(db.String(150), nullable = False)
+    
 
 class SpicyActivity(db.Model):
     __tablename__ = 'spicy_activities'
