@@ -138,11 +138,22 @@ class Notebook(db.Model):
 class Mission(db.Model):
     __tablename__ = 'missions'
     id = db.Column(db.Integer, primary_key=True)
-    couple_id = db.Column(db.Integer, db.ForeignKey('couples.id'))
-    missions = db.Column(db.JSON, nullable=False)
-    created_by = db.Column(db.Integer, db.ForeignKey('users.id'))
-    category = db.Column(db.String(150), nullable = False)
-    
+    content = db.Column(db.String(500), nullable=False)
+    category = db.Column(db.String(150), nullable=False)
+    created_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)  # Null for pre-created
+    is_precreated = db.Column(db.Boolean, default=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    # For pre-created missions: is_precreated=True, created_by=None
+    # For user-created: is_precreated=False, created_by=user.id
+
+
+# to handle the accepted missions
+class CoupleMission(db.Model):
+    __tablename__ = 'couples_missions'
+    id = db.Column(db.Integer, primary_key=True)
+    couple_id = db.Column(db.Integer, db.ForeignKey('couples.id'), nullable=False)
+    mission_id = db.Column(db.Integer, db.ForeignKey('missions.id'), nullable=False)
+    accepted_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 class SpicyActivity(db.Model):
     __tablename__ = 'spicy_activities'

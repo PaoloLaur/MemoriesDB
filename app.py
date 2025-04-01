@@ -7,6 +7,8 @@ from routes import api as api_blueprint
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from flask_jwt_extended import JWTManager
+from seed_missions import seed_missions
+
 
 
 limiter = Limiter(key_func=get_remote_address)
@@ -44,6 +46,10 @@ def create_app():
 
     # here register blueprints 
     app.register_blueprint(api_blueprint, url_prefix='/api')
+    
+    seed_missions(app, db)
+    
+
     return app
 
 app = create_app()

@@ -1,5 +1,5 @@
 from flask import Blueprint, request, jsonify, session
-from models import db, User, Couple, bcrypt 
+from models import db, User, Couple, Mission, CoupleMission
 import re  
 from flask_jwt_extended import create_access_token, create_refresh_token
 from flask_jwt_extended import jwt_required, get_jwt_identity
@@ -233,3 +233,67 @@ def refresh():
         # Specific error for expired refresh token
         return jsonify({"error": "Refresh token expired"}), 401
     
+
+
+@api.route('/missions', methods=['GET'])
+@jwt_required()
+def get_missions():
+    user_id = get_jwt_identity()
+    user = User.query.get(user_id)
+    couple_id = user.couple_id
+
+    # Fetch all missions
+    missions = Mission.query.all()
+
+    # Check acceptance
+    accepted_mission_ids = {cm.mission_id for cm in CoupleMission.query.filter_by(couple_id=couple_id)}
+
+    result = []
+    for mission in missions:
+        result.append({
+            'id': mission.id,
+            'content': mission.content,
+            'category': mission.category,
+            'is_precreated': mission.is_precreated,
+            'created_by': mission.created_by,
+            'accepted': mission.id in accepted_mission_ids
+        })
+    
+    return jsonify(result), 200
+
+
+@api.route('/missions', methods=['POST'])
+@jwt_required()
+def create_mission():
+    data = request.get_json()
+    user_id = get_jwt_identity()
+
+    new_mission = Mission(
+        content=data['content'],
+        category=data['category'],
+        created_by=user_id,
+        is_precreated=False
+    )
+    db.session.add(new_mission)
+    db.session.commit()
+
+    return jsonify({'message': 'Mission created', 'id': new_mission.id}), 201
+
+
+@api.route('/couples/<int:couple_id>/missions', methods=['POST'])
+@jwt_required()
+def accept_mission(couple_id):
+    data = request.get_json()
+    mission_id = data['mission_id']
+
+    # Verify user belongs to the couple
+    user_id = get_jwt_identity()
+    user = User.query.get(user_id)
+    if user.couple_id != couple_id:
+        return jsonify({'error': 'Unauthorized'}), 403
+
+    new_entry = CoupleMission(couple_id=couple_id, mission_id=mission_id)
+    db.session.add(new_entry)
+    db.session.commit()
+
+    return jsonify({'message': 'Mission accepted'}), 201
