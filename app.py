@@ -8,6 +8,8 @@ from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from flask_jwt_extended import JWTManager
 from seed_missions import seed_missions
+from seed_challenges import seed_challenges
+from seed_scenarios import seed_scenarios
 
 
 
@@ -18,6 +20,7 @@ def create_app():
 
     app = Flask(__name__) # __name__ variable that takes the name of the file (in this case app.py)
     app.config.from_object(Config) # from_object is safe, allows for configuring the flask application from the Config class
+
     jwt = JWTManager(app) 
 
     @jwt.token_verification_loader
@@ -47,8 +50,7 @@ def create_app():
     # here register blueprints 
     app.register_blueprint(api_blueprint, url_prefix='/api')
     
-    seed_missions(app, db)
-    
+
 
     return app
 
@@ -67,5 +69,11 @@ if __name__ == '__main__': # Ensuring code only runs when executing the file dir
 
         db.create_all() # with app.app_context is needed otherwise sqlalchemy doesnt know which config to use for db connections, creates all database tables based on your SQLAlchemy models. Don't use in prod, use either alembic or flask migration
 
+        seed_missions(app, db)
+
+        seed_challenges(app, db)
+        
+        seed_scenarios(app, db)
+    
         app.run(host='0.0.0.0', port=5001, ssl_context='adhoc')  
 

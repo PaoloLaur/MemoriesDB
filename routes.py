@@ -1,8 +1,10 @@
 from flask import Blueprint, request, jsonify, session
-from models import db, User, Couple, Mission, CoupleMission
+from models import db, User, Couple, Mission, CoupleMission, CoupleChallenges, Scenario, Challenges, CoupleScenario, StoryProgress
 import re  
 from flask_jwt_extended import create_access_token, create_refresh_token
 from flask_jwt_extended import jwt_required, get_jwt_identity
+from datetime import datetime, timedelta
+from apscheduler.schedulers.background import BackgroundScheduler
 
 
 
@@ -12,7 +14,7 @@ from flask_jwt_extended import jwt_required, get_jwt_identity
 we'll need a user, a couple ,a notebook, a missions, a spicy, blueprint
 
 after that, we can create routes such as
-
+s
 
 login
 
@@ -29,7 +31,7 @@ register
 
 api = Blueprint('api', __name__)
 
-# what does this decorator do??
+# here should ba added an has_premium feature and a has_premium feature in the user model
 @api.route('/register', methods=['POST'])
 def register():
     data = request.get_json() # how does the get_json function work at low level?
@@ -233,7 +235,7 @@ def refresh():
         # Specific error for expired refresh token
         return jsonify({"error": "Refresh token expired"}), 401
     
-
+# missions section
 
 @api.route('/missions', methods=['GET'])
 @jwt_required()
@@ -297,3 +299,239 @@ def accept_mission(couple_id):
     db.session.commit()
 
     return jsonify({'message': 'Mission accepted'}), 201
+
+
+
+
+# challenges section
+
+@api.route('/challenges', methods=['GET'])
+@jwt_required()
+def get_challenges():
+    user_id = get_jwt_identity()
+    user = User.query.get(user_id)
+    couple_id = user.couple_id
+
+    # Fetch all challenges
+    challenges = Challenges.query.all()
+
+    # Check acceptance
+    accepted_challenges_ids = {cm.challenges_id for cm in CoupleChallenges.query.filter_by(couple_id=couple_id)}
+
+    result = []
+    for challenges in challenges:
+        result.append({
+            'id': challenges.id,
+            'content': challenges.content,
+            'category': challenges.category,
+            'is_precreated': challenges.is_precreated,
+            'created_by': challenges.created_by,
+            'accepted': challenges.id in accepted_challenges_ids
+        })
+    
+    return jsonify(result), 200
+
+
+@api.route('/challenges', methods=['POST'])
+@jwt_required()
+def create_challenges():
+    data = request.get_json()
+    user_id = get_jwt_identity()
+
+    new_challenges = Challenges(
+        content=data['content'],
+        category=data['category'],
+        created_by=user_id,
+        is_precreated=False
+    )
+    db.session.add(new_challenges)
+    db.session.commit()
+
+    return jsonify({'message': 'challenges created', 'id': new_challenges.id}), 201
+
+
+@api.route('/couples/<int:couple_id>/challenges', methods=['POST'])
+@jwt_required()
+def accept_challenges(couple_id):
+    data = request.get_json()
+    challenges_id = data['challenges_id']
+
+    # Verify user belongs to the couple
+    user_id = get_jwt_identity()
+    user = User.query.get(user_id)
+    if user.couple_id != couple_id:
+        return jsonify({'error': 'Unauthorized'}), 403
+
+    new_entry = CoupleChallenges(couple_id=couple_id, challenges_id=challenges_id)
+    db.session.add(new_entry)
+    db.session.commit()
+
+    return jsonify({'message': 'challenges accepted'}), 201
+
+
+@api.route('/scenarios', methods=['GET'])
+@jwt_required()
+def get_scenarios():
+    try:
+        user_id = get_jwt_identity()
+        user = User.query.get(user_id)
+        couple_id = user.couple_id
+
+        # Get all scenarios
+        scenarios = Scenario.query.all()
+        
+        # Get accepted scenario IDs for this couple
+        accepted_ids = {cs.scenario_id for cs in CoupleScenario.query.filter_by(couple_id=couple_id)}
+
+        return jsonify([{
+            'id': s.id,
+            'setting': s.setting,
+            'roles': s.roles,
+            'prompt': s.prompt,
+            'time': s.time,
+            'is_precreated': s.is_precreated,
+            'accepted': s.id in accepted_ids  # Add acceptance status
+        } for s in scenarios]), 200
+        
+    except Exception as e:
+        print(f"Error fetching scenarios: {str(e)}")
+        return jsonify({"error": "Failed to fetch scenarios"}), 500
+    
+
+@api.route('/couples/<int:couple_id>/scenarios', methods=['POST'])
+@jwt_required()
+def accept_scenario(couple_id):
+    data = request.get_json()
+    scenario_id = data['scenario_id']
+
+    # Verify user belongs to the couple
+    user_id = get_jwt_identity()
+    user = User.query.get(user_id)
+    if user.couple_id != couple_id:
+        return jsonify({'error': 'Unauthorized'}), 403
+
+    new_entry = CoupleScenario(couple_id=couple_id, scenario_id=scenario_id)
+    db.session.add(new_entry)
+    db.session.commit()
+
+    return jsonify({'message': 'scenario accepted'}), 201
+
+
+def create_page_notebook():
+    # This function is a placeholder for creating a page in the notebook
+    # a notebook model should be a list of pages (page should be another model then i guess)
+    # the function should create a page in the notebook, and the page in the notebook should have the following fields:
+
+    
+    pass
+
+def get_page_notebook():
+    # This function is a placeholder for getting a page in the notebook
+    # it should return the page  or maybe a bunch of pages like in a paginated way(?) in the notebook, and the page in the notebook should have the following fields:
+
+    
+    pass
+
+def delete_page_notebook():
+    # This function is a placeholder for deleting a page in the notebook
+    # it should delete the page in the notebook, and the page in the notebook 
+
+    
+    pass
+
+
+"""
+def check_upload_limit(user_id):
+    from your_app.models import Image
+    current_count = Image.query.filter_by(user_id=user_id).count()
+    return current_count >= 50
+
+"""
+
+
+#use when user clicks on start now?
+@api.route('/story/start', methods=['POST'])
+@jwt_required()
+def start_story():
+    user = User.query.get(get_jwt_identity())
+    couple = user.couple
+    
+    if couple.story_started_at:
+        return jsonify({'error': 'Story already started'}), 400
+        
+    couple.story_started_at = datetime.now()
+    couple.story_current_page = 0
+    db.session.commit()
+    
+    return jsonify({
+        'started_at': couple.story_started_at.isoformat(),
+        'current_page': couple.story_current_page,
+        'completed_pages': []  # Add empty array
+
+    }), 200
+
+
+#use when the user opens the sheet of the story book view, gets automatically called this function?
+@api.route('/story/status', methods=['GET'])
+@jwt_required()
+def get_story_status():
+    user = User.query.get(get_jwt_identity())
+    couple = user.couple
+    
+    completed_pages = [{
+        'page_number': p.page_number,
+        'completed_at': p.completed_at.isoformat(),
+        'fun_level': p.fun_level,
+        'comments': p.comments
+    } for p in couple.completed_pages]
+    
+    return jsonify({
+        'current_page': couple.story_current_page,
+        'started_at': couple.story_started_at.isoformat() if couple.story_started_at else None,
+        'completed_pages': completed_pages
+    }), 200
+
+# this is used when a page (one page then in the frontedn should contain two challenges)?
+
+@api.route('/story/progress', methods=['POST'])
+@jwt_required()
+def update_progress():
+    user = User.query.get(get_jwt_identity())
+    couple = user.couple
+    data = request.get_json()
+
+    # Validate required fields
+    page_number = data.get('page_number')
+    if page_number is None:
+        return jsonify({'error': 'page_number is required'}), 400
+
+    # Find existing progress or create new
+    existing_progress = StoryProgress.query.filter_by(
+        couple_id=couple.id,
+        page_number=page_number
+    ).first()
+
+    if existing_progress:
+        # Update existing entry
+        existing_progress.fun_level = data.get('fun_level', existing_progress.fun_level)
+        existing_progress.comments = data.get('comments', existing_progress.comments)
+        existing_progress.completed_at = datetime.now()
+    else:
+        # Create new entry
+        new_progress = StoryProgress(
+            couple_id=couple.id,
+            page_number=page_number,
+            completed_at=datetime.now(),
+            fun_level=data.get('fun_level'),
+            comments=data.get('comments')
+        )
+        db.session.add(new_progress)
+
+    db.session.commit()
+
+    return jsonify({
+        'completed_at': existing_progress.completed_at.isoformat() if existing_progress 
+                        else new_progress.completed_at.isoformat()
+    }), 200
+
+
