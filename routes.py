@@ -1,12 +1,12 @@
 from flask import Blueprint, request, jsonify, session
-from models import db, User, Couple, Mission, CoupleMission, CoupleChallenges, Scenario, Challenges, CoupleScenario, StoryProgress
+from models import db, User, Couple, Mission, CoupleMission, CoupleChallenges, Scenario, Challenges, CoupleScenario, StoryProgress, bcrypt
 import re  
 from flask_jwt_extended import create_access_token, create_refresh_token
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from datetime import datetime, timedelta
-from apscheduler.schedulers.background import BackgroundScheduler
-
-
+from google.oauth2 import id_token
+from google.auth.transport import requests
+import os
 
 """
 
@@ -30,136 +30,141 @@ register
 # ADDED THIS TO THE IMPORT FROM MODELS: User, Couple, bcrypt
 
 api = Blueprint('api', __name__)
+CLIENT_ID = os.getenv('GOOGLE_CLIENT_ID')
 
-# here should ba added an has_premium feature and a has_premium feature in the user model
-@api.route('/register', methods=['POST'])
-def register():
-    data = request.get_json() # how does the get_json function work at low level?
-    print(data)
 
-    if len(data.get('username')) < 3:
-        return jsonify({'error': 'Username must be at least 3 characters'}), 400
-    if len(data.get('password')) < 8:
-        return jsonify({'error': 'Password must be at least 8 characters'}), 400
-    if not re.match("^[a-zA-Z0-9_]*$", data.get('username')):
-        return jsonify({'error': 'Username can only contain letters, numbers and underscores'}), 400
-    if not data.get('name') or len(data.get('name', '').strip()) == 0:
-        return jsonify({'error': 'Name is required'}), 400
+@api.route('/auth/google/register', methods=['POST'])
+def google_register():
+    data = request.get_json()
+    id_token_str = data.get('token')
+    
+    # Verify token first
+    try:
+        idinfo = id_token.verify_oauth2_token(id_token_str, requests.Request(), CLIENT_ID)
+        if idinfo['aud'] != CLIENT_ID:
+            return jsonify({'error': 'Invalid token'}), 401
+        email = idinfo['email']
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 401
 
-    username = data.get('username', '').strip()
-    password = data.get('password', '').strip()
-    name = data.get('name', '').strip()
+    # Check existing user
+    if User.query.filter_by(username=email).first():
+        return jsonify({'error': 'User already exists'}), 409
+
+    # Extract fields
     invitation_code = data.get('invitation_code', '').strip()
+    name = data.get('name', '')
+    accepted_terms = data.get('accepted_terms', False)
+
+    if len(name) > 30:
+        return jsonify({'error': 'Name too long'}), 400
+
 
     
-    if User.query.filter_by(username=username).first(): #why the 'first'?
-        return jsonify({'error': 'Username already exists'}), 409
-    
-    if not invitation_code and not data.get('couple_name'):
-        return jsonify({'error': 'Couple name is required'}), 400
-    
-
-    
- # CASE 1: Joining existing couple
+    # Validate common fields
+    if not all([name, accepted_terms]):
+        return jsonify({'error': 'Missing name or terms acceptance'}), 400
+        
+    # Handle invitation code case
     if invitation_code:
         couple = Couple.query.filter_by(invitation_code=invitation_code).first()
-        
         if not couple:
-            return jsonify({'error': 'Invalid code'}), 404
-        
-        # which one is best??
-        
-        user_count = User.query.filter_by(couple_id=couple.id).count()
-        if user_count >= 2:
-            return jsonify({'error': 'Couple is full'}), 400
+            return jsonify({'error': 'Invalid invitation code'}), 404
             
         if len(couple.users) >= 2:
-            return jsonify({'error': 'Couple full'}), 400
-
-        new_user = User(
-            username=username,
-            password=password,
-            name=name,  
-            couple_id=couple.id
-        )
+            return jsonify({'error': 'Couple is full'}), 400
         
-        db.session.add(new_user)
-        db.session.commit()
-
-        access_token = create_access_token(identity=str(new_user.id))  # Convert to string
-        refresh_token = create_refresh_token(identity=str(new_user.id))
-            
-        return jsonify({
-            'access_token': access_token,
-            'refresh_token': refresh_token,
-            'message': 'Joined couple',
-            'user_id': new_user.id,
-            'couple_id': couple.id
-        }), 201
-
-    # CASE 2: Creating new couple
+        couple_id = couple.id
+        couple_name = couple.couple_name  # Get from existing couple
+        
+    # Handle new couple case
     else:
-        # FIX HERE: Create and commit couple first
-        new_couple = Couple(couple_name=data.get('couple_name'))
+        couple_name = data.get('couple_name', '')
+        if not couple_name:
+            return jsonify({'error': 'Couple name required for new couples'}), 400
+            
+        if len(couple_name) > 30:
+            return jsonify({'error': 'Couple name too long'}), 400
+            
+        new_couple = Couple(couple_name=couple_name)
         db.session.add(new_couple)
-        db.session.flush()  # Generate ID without full commit
-        
-        new_user = User(
-            username=username,
-            password=password,
-            name=name, 
-            couple_id=new_couple.id  # Now has valid ID
-        )
-        
+        db.session.flush()
+        couple_id = new_couple.id
+
+    # Create user
+    new_user = User(
+        username=email,
+        name=name,
+        couple_id=couple_id
+    )
+    
+    try:
         db.session.add(new_user)
         db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
 
-        session['user_id'] = new_user.id 
+    # Generate tokens
+    access_token = create_access_token(identity=str(new_user.id))
+    refresh_token = create_refresh_token(identity=str(new_user.id))
 
-        access_token = create_access_token(identity=str(new_user.id))  # Convert to string
-        refresh_token = create_refresh_token(identity=str(new_user.id))
-            
-    
+    return jsonify({
+        'access_token': access_token,
+        'refresh_token': refresh_token,
+        'user_id': new_user.id,
+        'couple_id': couple_id,
+        'couple_name': couple_name
+    }), 201
 
-    
-        return jsonify({
-            'access_token': access_token,
-            'refresh_token': refresh_token,
-            'message': 'Couple created',
-            'user_id': new_user.id,
-            'couple_id': new_couple.id,
-            'invitation_code': new_couple.invitation_code  # Send this to user
-        }), 201
-
-# Ensure consistent error responses
-@api.route('/login', methods=['POST'])
-def login():
+@api.route('/auth/google/login', methods=['POST'])
+def google_login():
+    id_token_str = request.get_json().get('token')
     try:
-        data = request.get_json()
-        user = User.query.filter_by(username=data.get('username')).first()
-        
+        idinfo = id_token.verify_oauth2_token(id_token_str, requests.Request(), CLIENT_ID)
+        email = idinfo['email']
+    except ValueError:
+        return jsonify({'error': 'Invalid token'}), 401
+
+    user = User.query.filter_by(username=email).first()
+    if not user:
+        return jsonify({'error': 'User not registered'}), 404
+
+    access_token = create_access_token(identity=str(user.id))
+    refresh_token = create_refresh_token(identity=str(user.id))
+    return jsonify({
+        'access_token': access_token,
+        'refresh_token': refresh_token,
+        'user_id': user.id,
+        'couple_id': user.couple_id
+    }), 200
+
+
+@api.route('/users/delete', methods=['DELETE'])
+@jwt_required()
+def delete_user():
+    try:
+        user_id = get_jwt_identity()
+        user = User.query.get(user_id)
         if not user:
             return jsonify({'error': 'User not found'}), 404
-            
-        if not user.check_password(data.get('password')):
-            return jsonify({'error': 'Incorrect password'}), 401
-        
-        session['user_id'] = user.id 
-        session.permanent = True
 
-        access_token = create_access_token(identity=str(user.id))  # Convert to string
-        refresh_token = create_refresh_token(identity=str(user.id))
-            
-        return jsonify({
-            'access_token': access_token,
-            'refresh_token': refresh_token,
-            'user_id': user.id,
-            'couple_id': user.couple_id
-        }), 200
-   
-
+        couple = Couple.query.get(user.couple_id)
         
+        # Delete user
+        db.session.delete(user)
+        
+        # Check if couple has no remaining users
+        remaining_users = User.query.filter_by(couple_id=couple.id).count()
+        if remaining_users == 0:
+            # Delete couple and related data
+            db.session.delete(couple)
+            
+        db.session.commit()
+        return jsonify({'message': 'Account deleted successfully'}), 200
+
     except Exception as e:
+        db.session.rollback()
         return jsonify({'error': str(e)}), 500
     
 
@@ -197,31 +202,7 @@ def get_couple_details():
         print(f"💥 Unexpected error: {str(e)}")
         return jsonify({'error': 'Internal server error'}), 500
 
-@api.route('/change-password', methods=['PUT'])
-@jwt_required()
-def change_password():
-    data = request.get_json()
-    user_id = get_jwt_identity()  # Get user ID from JWT
 
-    print(user_id)
-
-    if not user_id:
-        return jsonify({'error': 'Unauthorized'}), 401
-    
-    user = User.query.get(user_id)
-    if not user:
-        return jsonify({'error': 'User not found'}), 404
-    
-    if not user.check_password(data.get('current_password')):
-        return jsonify({'error': 'Current password is incorrect'}), 400
-    
-    if len(data.get('new_password')) < 8:
-        return jsonify({'error': 'New password must be at least 8 characters'}), 400
-    
-    user.password = data.get('new_password')
-    db.session.commit()
-    
-    return jsonify({'message': 'Password updated successfully'}), 200
 
 @api.route('/refresh', methods=['POST'])
 @jwt_required(refresh=True)  # This validates the refresh token
@@ -234,6 +215,8 @@ def refresh():
     except Exception as e:
         # Specific error for expired refresh token
         return jsonify({"error": "Refresh token expired"}), 401
+
+
     
 # missions section
 

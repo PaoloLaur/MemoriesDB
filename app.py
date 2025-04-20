@@ -10,7 +10,7 @@ from flask_jwt_extended import JWTManager
 from seed_missions import seed_missions
 from seed_challenges import seed_challenges
 from seed_scenarios import seed_scenarios
-
+import os 
 
 
 limiter = Limiter(key_func=get_remote_address)
@@ -49,7 +49,21 @@ def create_app():
 
     # here register blueprints 
     app.register_blueprint(api_blueprint, url_prefix='/api')
-    
+    """
+    google_bp = make_google_blueprint(
+    client_id=os.getenv('GOOGLE_CLIENT_ID'),
+    client_secret=os.getenv('GOOGLE_CLIENT_SECRET'),
+    scope=["profile", "email"],
+    redirect_url="/api/google/callback"
+    )
+    app.register_blueprint(google_bp, url_prefix="/api/auth")       
+    """
+
+    # After all routes are registered and before app.run()
+    print("\n=== REGISTERED ROUTES ===")
+    for rule in app.url_map.iter_rules():
+        print(f"{rule} ({', '.join(rule.methods)})")
+    print("========================\n")
 
 
     return app

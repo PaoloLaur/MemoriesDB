@@ -77,9 +77,9 @@ class User(db.Model):
     #not nullable keys
 
     id = db.Column(db.Integer, primary_key=True) # why primary key? this is built in such a way that every id is unique, but how?
-    username = db.Column(db.String(20), unique=True, nullable=False) # what is the (80)?
-    password_hash = db.Column(db.String(120), nullable=False)
-    name = db.Column(db.String(14), nullable=False)  # Add this line
+    username = db.Column(db.String(120), unique=True, nullable=False)  # Changed from 20 to 120
+    name = db.Column(db.String(30), nullable=False)    
+    password_hash = db.Column(db.String(120), nullable=True)
 
     couple_id = db.Column(db.Integer, db.ForeignKey('couples.id'), nullable=False) # what is ForeignKey?
     created_at = db.Column(db.DateTime, default=datetime.now) # is this necessary? does it have a problem??
@@ -129,7 +129,6 @@ class Couple(db.Model):
     def __init__(self, couple_name):
         self.invitation_code = str(uuid.uuid4())  # Generate unique code
         self.couple_name = couple_name
-
     
     
 class StoryProgress(db.Model):
