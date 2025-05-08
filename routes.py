@@ -45,7 +45,7 @@ def google_register():
             return jsonify({'error': 'Invalid token'}), 401
         email = idinfo['email']
     except ValueError as e:
-        return jsonify({'error': str(e)}), 401
+        return jsonify({'error': str(e)}), 402
 
     # Check existing user
     if User.query.filter_by(username=email).first():
@@ -63,7 +63,7 @@ def google_register():
     
     # Validate common fields
     if not all([name, accepted_terms]):
-        return jsonify({'error': 'Missing name or terms acceptance'}), 400
+        return jsonify({'error': 'Missing name or terms acceptance'}), 403
         
     # Handle invitation code case
     if invitation_code:
@@ -72,7 +72,7 @@ def google_register():
             return jsonify({'error': 'Invalid invitation code'}), 404
             
         if len(couple.users) >= 2:
-            return jsonify({'error': 'Couple is full'}), 400
+            return jsonify({'error': 'Couple is full'}), 405
         
         couple_id = couple.id
         couple_name = couple.couple_name  # Get from existing couple
@@ -81,10 +81,10 @@ def google_register():
     else:
         couple_name = data.get('couple_name', '')
         if not couple_name:
-            return jsonify({'error': 'Couple name required for new couples'}), 400
+            return jsonify({'error': 'Couple name required for new couples'}), 406
             
         if len(couple_name) > 30:
-            return jsonify({'error': 'Couple name too long'}), 400
+            return jsonify({'error': 'Couple name too long'}), 407
             
         new_couple = Couple(couple_name=couple_name)
         db.session.add(new_couple)
@@ -150,16 +150,40 @@ def delete_user():
             return jsonify({'error': 'User not found'}), 404
 
         couple = Couple.query.get(user.couple_id)
-        
-        # Delete user
+
+        # Get all user-created content first
+        user_missions = Mission.query.filter_by(created_by=user.id).all()
+        user_challenges = Challenges.query.filter_by(created_by=user.id).all()
+        user_scenarios = Scenario.query.filter_by(created_by=user.id).all()
+
+        # Delete dependent records first
+        # 1. Handle Missions
+        for mission in user_missions:
+            # Delete from couples_missions first
+            CoupleMission.query.filter_by(mission_id=mission.id).delete()
+            db.session.delete(mission)
+
+        # 2. Handle Challenges
+        for challenge in user_challenges:
+            # Delete from couple_challenges first
+            CoupleChallenges.query.filter_by(challenges_id=challenge.id).delete()
+            db.session.delete(challenge)
+
+        # 3. Handle Scenarios
+        for scenario in user_scenarios:
+            # Delete from couples_scenarios first
+            CoupleScenario.query.filter_by(scenario_id=scenario.id).delete()
+            db.session.delete(scenario)
+
+        # Then delete user
         db.session.delete(user)
-        
-        # Check if couple has no remaining users
+
+        # Rest of the couple handling remains the same...
         remaining_users = User.query.filter_by(couple_id=couple.id).count()
         if remaining_users == 0:
-            # Delete couple and related data
+            StoryProgress.query.filter_by(couple_id=couple.id).delete()
             db.session.delete(couple)
-            
+
         db.session.commit()
         return jsonify({'message': 'Account deleted successfully'}), 200
 
@@ -227,8 +251,7 @@ def get_missions():
     user = User.query.get(user_id)
     couple_id = user.couple_id
 
-    # Fetch all missions
-    missions = Mission.query.all()
+    missions = Mission.query.filter((Mission.is_precreated == True) | (Mission.created_by == couple_id)).all()
 
     # Check acceptance
     accepted_mission_ids = {cm.mission_id for cm in CoupleMission.query.filter_by(couple_id=couple_id)}
@@ -252,11 +275,13 @@ def get_missions():
 def create_mission():
     data = request.get_json()
     user_id = get_jwt_identity()
+    user = User.query.get(user_id)
+    couple_id = user.couple_id
 
     new_mission = Mission(
         content=data['content'],
         category=data['category'],
-        created_by=user_id,
+        created_by=couple_id,
         is_precreated=False
     )
     db.session.add(new_mission)
@@ -296,7 +321,7 @@ def get_challenges():
     couple_id = user.couple_id
 
     # Fetch all challenges
-    challenges = Challenges.query.all()
+    challenges = Challenges.query.filter((Challenges.is_precreated == True) | (Challenges.created_by == couple_id)).all()
 
     # Check acceptance
     accepted_challenges_ids = {cm.challenges_id for cm in CoupleChallenges.query.filter_by(couple_id=couple_id)}
@@ -320,11 +345,13 @@ def get_challenges():
 def create_challenges():
     data = request.get_json()
     user_id = get_jwt_identity()
+    user = User.query.get(user_id)
+    couple_id = user.couple_id
 
     new_challenges = Challenges(
         content=data['content'],
         category=data['category'],
-        created_by=user_id,
+        created_by=couple_id,
         is_precreated=False
     )
     db.session.add(new_challenges)
@@ -373,7 +400,7 @@ def get_scenarios():
             'prompt': s.prompt,
             'time': s.time,
             'is_precreated': s.is_precreated,
-            'accepted': s.id in accepted_ids  # Add acceptance status
+            'accepted': s.id in accepted_ids  
         } for s in scenarios]), 200
         
     except Exception as e:
@@ -400,27 +427,6 @@ def accept_scenario(couple_id):
     return jsonify({'message': 'scenario accepted'}), 201
 
 
-def create_page_notebook():
-    # This function is a placeholder for creating a page in the notebook
-    # a notebook model should be a list of pages (page should be another model then i guess)
-    # the function should create a page in the notebook, and the page in the notebook should have the following fields:
-
-    
-    pass
-
-def get_page_notebook():
-    # This function is a placeholder for getting a page in the notebook
-    # it should return the page  or maybe a bunch of pages like in a paginated way(?) in the notebook, and the page in the notebook should have the following fields:
-
-    
-    pass
-
-def delete_page_notebook():
-    # This function is a placeholder for deleting a page in the notebook
-    # it should delete the page in the notebook, and the page in the notebook 
-
-    
-    pass
 
 
 """
@@ -517,4 +523,9 @@ def update_progress():
                         else new_progress.completed_at.isoformat()
     }), 200
 
+
+
+
+
+  
 

@@ -1,7 +1,7 @@
 import os 
 from datetime import timedelta
 
-class Config: #in a more professional environment one could split in BaseConfig, DevCOnfig and ProdConfig, but the structure remains a class
+class Config: 
 
     SECRET_KEY = os.getenv('SECRET_KEY')
     SQLALCHEMY_DATABASE_URI = os.getenv('DATABASE_URL')

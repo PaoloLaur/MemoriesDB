@@ -23,15 +23,11 @@ def create_app():
 
     jwt = JWTManager(app) 
 
-    @jwt.token_verification_loader
-    def verify_token(header_data, payload):
-        print(f"🔍 Verifying token: {header_data} | {payload}")
-        return True  # Temporary for debugging
 
     @jwt.invalid_token_loader
     def handle_invalid_token(error):
         print(f"❌ Invalid token: {error}")
-        return jsonify({"error": "Invalid token"}), 422
+        return jsonify({"error": "Invalid token"}), 401
 
     CORS(app, resources={
         r"/api/*": {
@@ -43,21 +39,15 @@ def create_app():
     })
      # a flask extension, allows for cross origin resource sharing. In produciton origins should be either restricted or recondidered
     limiter.init_app(app)
+    limiter.default_limits = ["10800 per hour"] 
+
 
     db.init_app(app)
     bcrypt.init_app(app)
 
     # here register blueprints 
     app.register_blueprint(api_blueprint, url_prefix='/api')
-    """
-    google_bp = make_google_blueprint(
-    client_id=os.getenv('GOOGLE_CLIENT_ID'),
-    client_secret=os.getenv('GOOGLE_CLIENT_SECRET'),
-    scope=["profile", "email"],
-    redirect_url="/api/google/callback"
-    )
-    app.register_blueprint(google_bp, url_prefix="/api/auth")       
-    """
+
 
     # After all routes are registered and before app.run()
     print("\n=== REGISTERED ROUTES ===")
@@ -76,7 +66,7 @@ app = create_app()
 
 if __name__ == '__main__': # Ensuring code only runs when executing the file directly (python app.py), not when imported as a module, never used in production deployments (WSGI servers like Gunicorn don't execute this block).
 
-    logging.basicConfig(level=logging.DEBUG) # dangerous in prod
+    logging.basicConfig(level=logging.DEBUG) # dangerous in prod,change to logging.INFO
 
     with app.app_context():
         #db.drop_all()  # REMOVE BEFORE PROD

@@ -3,63 +3,63 @@ from datetime import datetime
 precreated_challenges = [
     {
         "content": "Spicy Dance-Off: Have a 3-minute dance battle where you try to out-seduce each other using only body movements",
-        "category": "Physical"
+        "category": "Light"
     },
     {
         "content": "Sensory Blackout: Feed each other mystery foods blindfolded and guess what they are",
-        "category": "Sensory"
+        "category": "Light"
     },
     {
         "content": "Role Reversal Quiz: Answer intimate questions while pretending to be each other",
-        "category": "Emotional"
+        "category": "Light"
     },
     {
         "content": "Tension Tower: Build a tower of objects using only your mouths (start with light snacks like crackers)",
-        "category": "Playful"
+        "category": "Light"
     },
     {
         "content": "Memory Lane: Recreate your first date... with exaggerated romantic clichés",
-        "category": "Nostalgic"
+        "category": "Light"
     },
     {
         "content": "Whisper Challenge: Describe your fantasies using only single-word hints while loud music plays",
-        "category": "Communication"
+        "category": "Medium"
     },
     {
         "content": "Sync or Swim: Attempt to mirror each other's movements perfectly for 5 minutes straight",
-        "category": "Coordination"
+        "category": "Medium"
     },
     {
         "content": "Sensual Sketch: Draw portraits of each other using only non-dominant hands",
-        "category": "Creative"
+        "category": "Medium"
     },
     {
         "content": "Temperature Play: Exchange massages using alternating hot/cold items (safety first!)",
-        "category": "Sensory"
+        "category": "Medium"
     },
     {
         "content": "Eye Contact Marathon: Maintain unbroken eye contact while asking increasingly personal questions",
-        "category": "Intimacy"
+        "category": "Medium"
     },
     {
         "content": "Fantasy Charades: Act out secret desires without using words",
-        "category": "Playful"
+        "category": "Hard"
     },
     {
         "content": "Breathing Sync: Match your breathing patterns while sitting back-to-back",
-        "category": "Connection"
+        "category": "Hard"
     },
     {
         "content": "Scent Memory: Create custom perfumes/oils for each other using household items",
-        "category": "Sensory"
+        "category": "Hard"
     },
     {
         "content": "Kiss Catalogue: Invent 5 new types of kisses and name them together",
-        "category": "Physical"
+        "category": "Hard"
     },
     {
         "content": "Future Fantasy: Describe your ideal day together 10 years from now in vivid detail",
-        "category": "Emotional"
+        "category": "Hard"
     }
 ]
 

@@ -106,8 +106,6 @@ class User(db.Model):
         return bcrypt.check_password_hash(self.password_hash, password)
     
 
-# OTHER CLASSES, NOT CURRENT FOCUS
-
 class Couple(db.Model):
     __tablename__ = 'couples'
 
@@ -144,7 +142,7 @@ class Mission(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     content = db.Column(db.String(500), nullable=False)
     category = db.Column(db.String(150), nullable=False)
-    created_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)  # Null for pre-created
+    created_by = db.Column(db.Integer, db.ForeignKey('couples.id'), nullable=True)  # Null for pre-created
     is_precreated = db.Column(db.Boolean, default=False)
     created_at = db.Column(db.DateTime, default=datetime.now)
     # For pre-created missions: is_precreated=True, created_by=None
@@ -165,7 +163,7 @@ class Challenges(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     content = db.Column(db.String(500), nullable=False)
     category = db.Column(db.String(150), nullable=False)
-    created_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)  # Null for pre-created
+    created_by = db.Column(db.Integer, db.ForeignKey('couples.id'), nullable=True)  # Null for pre-created
     is_precreated = db.Column(db.Boolean, default=False)
     created_at = db.Column(db.DateTime, default=datetime.now)
 
