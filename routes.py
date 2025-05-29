@@ -7,36 +7,151 @@ from datetime import datetime, timedelta
 from google.oauth2 import id_token
 from google.auth.transport import requests
 import os
+from functools import wraps
+import html
+from datetime import datetime, timedelta
+import logging
 
-"""
-
-
-we'll need a user, a couple ,a notebook, a missions, a spicy, blueprint
-
-after that, we can create routes such as
-s
-
-login
-
-register
-
-....
+#TODO:
+# REDIS PER RATE LIMITING
+# ID FOR EACH REQUEST TO BE SHOWN IN THE LOGS
 
 
 
-"""
-
-
-# ADDED THIS TO THE IMPORT FROM MODELS: User, Couple, bcrypt
 
 api = Blueprint('api', __name__)
+
 CLIENT_ID = os.getenv('GOOGLE_CLIENT_ID')
+
+if not CLIENT_ID:
+    raise ValueError("Google Client ID not found")
+
+security_logger = logging.getLogger('security')
+security_handler = logging.FileHandler('security.log')
+security_handler.setLevel(logging.WARNING)
+security_logger.addHandler(security_handler)
+
+def log_security_event(user_id, event_type, details):
+    """Log security-related events"""
+    security_logger.warning(f"User {user_id}: {event_type} - {details}")
+
+def validate_request_size(max_size_mb=1):
+    """Limit request size to prevent DoS"""
+    def decorator(f):
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            if request.content_length and request.content_length > max_size_mb * 1024 * 1024:
+                return jsonify({'error': 'Request too large'}), 413
+            return f(*args, **kwargs)
+        return decorated_function
+    return decorator
+
+def validate_json_structure():
+    """Ensure JSON is properly structured"""
+    def decorator(f):
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            if not request.is_json:
+
+                return jsonify({'error': 'Content-Type must be application/json'}), 400
+            
+            try:
+                data = request.get_json()
+                if data is None:
+                    return jsonify({'error': 'Invalid JSON'}), 400
+            except Exception:
+                return jsonify({'error': 'Malformed JSON'}), 400
+            
+            return f(*args, **kwargs)
+        return decorated_function
+    return decorator
+
+def validate_text_input(text, field_name, max_length=500, min_length=1):
+    """
+    Validate and sanitize text input to prevent injection attacks
+    """
+    if text is None or not isinstance(text, str):
+        return None, f"{field_name} is required and must be text"
+    
+    # Strip whitespace
+    text = text.strip()
+    
+    # Check length
+    if len(text) < min_length:
+        return None, f"{field_name} is too short"
+    if len(text) > max_length:
+        return None, f"{field_name} is too long (max {max_length} characters)"
+    
+    # Check for potentially dangerous patterns
+    dangerous_patterns = [
+        r'<script[^>]*>.*?</script>',  # Script tags
+        r'javascript:',               # JavaScript protocol
+        r'on\w+\s*=',                # Event handlers
+        r'<iframe[^>]*>',            # Iframes
+        r'<object[^>]*>',            # Objects
+        r'<embed[^>]*>',             # Embeds
+        r'eval\s*\(',                # eval() calls
+        r'Function\s*\(',            # Function constructor
+    ]
+    
+    for pattern in dangerous_patterns:
+        if re.search(pattern, text, re.IGNORECASE):
+            return None, f"{field_name} contains potentially unsafe content"
+    
+    # Additional check for excessive special characters
+    special_char_count = len(re.findall(r'[<>{}[\]\\`]', text))
+    if special_char_count > len(text) * 0.1:  # More than 10% special chars
+        return None, f"{field_name} contains too many special characters"
+    
+    return text, None
+
+def validate_name(name):
+    """Specific validation for names"""
+    name, error = validate_text_input(name, "Name", max_length=30, min_length=1)
+    if error:
+        return None, error
+    
+    # Names should be mostly letters, spaces, hyphens, apostrophes
+    if not re.match(r"^[a-zA-Z\s\-'\.]+$", name):
+        return None, "Name contains invalid characters"
+    
+    return name, None
+
+def validate_content(content, content_type="Content"):
+    """Validate mission/challenge content"""
+    return validate_text_input(content, content_type, max_length=300, min_length=5)
+
+def validate_comments(comments):
+    """Validate user comments"""
+    if not comments:  # Comments are optional
+        return "", None
+    return validate_text_input(comments, "Comments", max_length=300, min_length=1)
+
+def validate_id_int(id, field_name):
+    """validate the id, when supposed to be a single integer"""
+    if id is None or not isinstance(id, int):
+        return None, f"{field_name} is required and must be integer"
+    if len(str(id)) > 5:
+        return None, f"{field_name} is too long"
+    
+    return id, None
+
+
+
+
+
+# ------------------------------------------------
+# ------------------------------------------------
+# ------------------------------------------------
 
 
 @api.route('/auth/google/register', methods=['POST'])
+@validate_request_size(max_size_mb=3)
+@validate_json_structure()
 def google_register():
     data = request.get_json()
     id_token_str = data.get('token')
+    print(id_token_str)
     
     # Verify token first
     try:
@@ -44,6 +159,7 @@ def google_register():
         if idinfo['aud'] != CLIENT_ID:
             return jsonify({'error': 'Invalid token'}), 401
         email = idinfo['email']
+        print(email)
     except ValueError as e:
         return jsonify({'error': str(e)}), 402
 
@@ -53,7 +169,15 @@ def google_register():
 
     # Extract fields
     invitation_code = data.get('invitation_code', '').strip()
+    if invitation_code:
+        if len(invitation_code) > 40 or len(invitation_code) < 10:
+            return jsonify({'error': 'Invalid invitation code'}, 408)
+        
     name = data.get('name', '')
+    name, error = validate_name(name)
+    if error:
+        return jsonify({'error': error}), 400
+    
     accepted_terms = data.get('accepted_terms', False)
 
     if len(name) > 30:
@@ -85,6 +209,13 @@ def google_register():
             
         if len(couple_name) > 30:
             return jsonify({'error': 'Couple name too long'}), 407
+        
+        validated_couple_name, error = validate_name(couple_name)
+        if error:
+            return jsonify({'error': f"Couple {error.lower()}"}), 400
+        
+        couple_name = validated_couple_name
+    
             
         new_couple = Couple(couple_name=couple_name)
         db.session.add(new_couple)
@@ -118,6 +249,8 @@ def google_register():
     }), 201
 
 @api.route('/auth/google/login', methods=['POST'])
+@validate_request_size(max_size_mb=3)
+@validate_json_structure()
 def google_login():
     id_token_str = request.get_json().get('token')
     try:
@@ -139,56 +272,82 @@ def google_login():
         'couple_id': user.couple_id
     }), 200
 
-
 @api.route('/users/delete', methods=['DELETE'])
 @jwt_required()
+@validate_request_size(max_size_mb=3)
 def delete_user():
     try:
         user_id = get_jwt_identity()
         user = User.query.get(user_id)
+        print(f"User: {user}")
+        
         if not user:
             return jsonify({'error': 'User not found'}), 404
-
+        
         couple = Couple.query.get(user.couple_id)
-
+        print(f"Couple: {couple}")
+        print(f"User ID: {user.id}")
+        
         # Get all user-created content first
         user_missions = Mission.query.filter_by(created_by=user.id).all()
+        print(f"User missions: {user_missions}")
+        
         user_challenges = Challenges.query.filter_by(created_by=user.id).all()
+        print(f"User challenges: {user_challenges}")
+        
         user_scenarios = Scenario.query.filter_by(created_by=user.id).all()
-
+        print(f"User scenarios: {user_scenarios}")
+        
         # Delete dependent records first
         # 1. Handle Missions
         for mission in user_missions:
             # Delete from couples_missions first
             CoupleMission.query.filter_by(mission_id=mission.id).delete()
             db.session.delete(mission)
-
-        # 2. Handle Challenges
+        
+        # 2. Handle Challenges  
         for challenge in user_challenges:
             # Delete from couple_challenges first
             CoupleChallenges.query.filter_by(challenges_id=challenge.id).delete()
             db.session.delete(challenge)
-
+        
         # 3. Handle Scenarios
         for scenario in user_scenarios:
             # Delete from couples_scenarios first
             CoupleScenario.query.filter_by(scenario_id=scenario.id).delete()
             db.session.delete(scenario)
-
-        # Then delete user
+        
+        # Check remaining users BEFORE deleting current user
+        remaining_users_count = User.query.filter_by(couple_id=couple.id).filter(User.id != user.id).count()
+        print(f"Remaining users after deletion: {remaining_users_count}")
+        
+        # Delete the user
         db.session.delete(user)
-
-        # Rest of the couple handling remains the same...
-        remaining_users = User.query.filter_by(couple_id=couple.id).count()
-        if remaining_users == 0:
+        
+        # If this was the last user in the couple, delete the couple and related data
+        if remaining_users_count == 0:
+            print("Deleting couple and related data...")
+            
+            # Delete all couple's accepted content (regardless of who created it)
+            CoupleMission.query.filter_by(couple_id=couple.id).delete()
+            CoupleChallenges.query.filter_by(couple_id=couple.id).delete() 
+            CoupleScenario.query.filter_by(couple_id=couple.id).delete()
+            
+            # Delete story progress
             StoryProgress.query.filter_by(couple_id=couple.id).delete()
+            
+            # Finally delete the couple
             db.session.delete(couple)
-
+        
+        # Commit all changes
         db.session.commit()
+        print("Successfully deleted user and related data")
+        
         return jsonify({'message': 'Account deleted successfully'}), 200
-
+        
     except Exception as e:
         db.session.rollback()
+        print(f"Error deleting user: {str(e)}")
         return jsonify({'error': str(e)}), 500
     
 
@@ -198,22 +357,16 @@ def get_couple_details():
     try:
   
         user_id = get_jwt_identity()
-        print(f"🔑 User ID from JWT: {user_id} ({type(user_id)})")
         
         user = User.query.get(user_id)
         if not user:
-            print(f"❌ User not found: {user_id}")
             return jsonify({'error': 'User not found'}), 404
         
-        print(f"👫 User couple ID: {user.couple_id}")
         couple = Couple.query.get(user.couple_id)
         if not couple:
-            print(f"❌ Couple not found for user {user_id}")
             return jsonify({'error': 'Couple not found'}), 404
         
-        print(f"✅ Successfully retrieved couple: {couple.id}")
 
-        print(couple.couple_name, couple.level, couple.points, couple.invitation_code)
         return jsonify({
             'couple_name': couple.couple_name,
             'level': couple.level,
@@ -230,6 +383,8 @@ def get_couple_details():
 
 @api.route('/refresh', methods=['POST'])
 @jwt_required(refresh=True)  # This validates the refresh token
+@validate_request_size(max_size_mb=3)
+@validate_json_structure()
 def refresh():
     try:
         current_user = get_jwt_identity()
@@ -272,29 +427,69 @@ def get_missions():
 
 @api.route('/missions', methods=['POST'])
 @jwt_required()
+@validate_request_size(max_size_mb=3)
+@validate_json_structure()
 def create_mission():
     data = request.get_json()
+
+    content = data.get('content', '')
+    validated_content, error = validate_content(content, "Mission content")
+    if error:
+        return jsonify({'error': error}), 400
+    
+    category = data.get('category', '')
+    validated_category, error = validate_text_input(category, "Category", max_length=150, min_length=1)
+    if error:
+        return jsonify({'error': error}), 400
+    
+
     user_id = get_jwt_identity()
     user = User.query.get(user_id)
     couple_id = user.couple_id
 
+    # Query the database to count missions created by this couple
+    existing_mission_count = Mission.query.filter_by(created_by=couple_id).count()
+
+    print(existing_mission_count)
+
+    # Check if the count is more than 20
+    if existing_mission_count > 20:
+        return jsonify({'error': 'Forbidden - Maximum number of missions created (20) exceeded'}), 403
+
+    # Proceed to create the new mission
     new_mission = Mission(
-        content=data['content'],
-        category=data['category'],
+        content=validated_content,
+        category=validated_category,
         created_by=couple_id,
         is_precreated=False
     )
+
     db.session.add(new_mission)
     db.session.commit()
 
-    return jsonify({'message': 'Mission created', 'id': new_mission.id}), 201
+    return jsonify({
+        'id': new_mission.id,
+        'content': new_mission.content,
+        'category': new_mission.category,
+        'is_precreated': False,
+        'accepted': False,
+        'created_by': new_mission.created_by  
+    }), 201
 
 
 @api.route('/couples/<int:couple_id>/missions', methods=['POST'])
 @jwt_required()
+@validate_request_size(max_size_mb=3)
+@validate_json_structure()
 def accept_mission(couple_id):
     data = request.get_json()
+
     mission_id = data['mission_id']
+
+    mission_id, error = validate_id_int(mission_id, "mission id")
+    if error:
+        return jsonify({'error': error}), 400
+
 
     # Verify user belongs to the couple
     user_id = get_jwt_identity()
@@ -309,7 +504,48 @@ def accept_mission(couple_id):
     return jsonify({'message': 'Mission accepted'}), 201
 
 
+@api.route('/missions/<int:mission_id>', methods=['DELETE'])
+@jwt_required()
+@validate_request_size(max_size_mb=3)
+def delete_mission(mission_id):
+    user_id = get_jwt_identity()
+    user = User.query.get(user_id)
+    couple_id = user.couple_id
 
+    mission = Mission.query.get(mission_id)
+    if not mission:
+        return jsonify({'error': 'Challenge not found'}), 404
+        
+    # Only allow deletion of user-created challenges
+    if mission.created_by != couple_id:
+        return jsonify({'error': 'Unauthorized'}), 403
+
+    db.session.delete(mission)
+    db.session.commit()
+    return jsonify({'message': 'Challenge deleted'}), 200
+
+
+# Unlike a mission
+@api.route('/couples/<int:couple_id>/missions/<int:mission_id>', methods=['DELETE'])
+@jwt_required()
+@validate_request_size(max_size_mb=3)
+def unlike_mission(couple_id, mission_id):
+    user_id = get_jwt_identity()
+    user = User.query.get(user_id)
+    if user.couple_id != couple_id:
+        return jsonify({'error': 'Unauthorized'}), 403
+
+    entry = CoupleMission.query.filter_by(
+        couple_id=couple_id, 
+        mission_id=mission_id
+    ).first()
+    
+    if not entry:
+        return jsonify({'error': 'Entry not found'}), 404
+
+    db.session.delete(entry)
+    db.session.commit()
+    return jsonify({'message': 'Challenge unliked'}), 200
 
 # challenges section
 
@@ -342,29 +578,65 @@ def get_challenges():
 
 @api.route('/challenges', methods=['POST'])
 @jwt_required()
+@validate_request_size(max_size_mb=3)
+@validate_json_structure()
 def create_challenges():
     data = request.get_json()
+
+    content = data.get('content', '')
+    validated_content, error = validate_content(content, "Mission content")
+    if error:
+        return jsonify({'error': error}), 400
+    
+    category = data.get('category', '')
+    validated_category, error = validate_text_input(category, "Category", max_length=150, min_length=1)
+    if error:
+        return jsonify({'error': error}), 400
+    
+
     user_id = get_jwt_identity()
     user = User.query.get(user_id)
     couple_id = user.couple_id
 
+    # Query the database to count missions created by this couple
+    existing_challenges_count = Challenges.query.filter_by(created_by=couple_id).count()
+
+    print(existing_challenges_count)
+
+    # Check if the count is more than 20
+    if existing_challenges_count > 4:
+        return jsonify({'error': 'Forbidden - Maximum number of challenges created (20) exceeded'}), 403
+
     new_challenges = Challenges(
-        content=data['content'],
-        category=data['category'],
+        content=validated_content,
+        category=validated_category,
         created_by=couple_id,
         is_precreated=False
     )
     db.session.add(new_challenges)
     db.session.commit()
 
-    return jsonify({'message': 'challenges created', 'id': new_challenges.id}), 201
-
+    return jsonify({
+        'id': new_challenges.id,
+        'content': new_challenges.content,
+        'category': new_challenges.category,
+        'is_precreated': False,
+        'accepted': False,
+        'created_by': new_challenges.created_by  
+    }), 201
 
 @api.route('/couples/<int:couple_id>/challenges', methods=['POST'])
 @jwt_required()
+@validate_request_size(max_size_mb=3)
+@validate_json_structure()
 def accept_challenges(couple_id):
     data = request.get_json()
     challenges_id = data['challenges_id']
+
+    challenges_id, error = validate_id_int(challenges_id, "mission id")
+    if error:
+        return jsonify({'error': error}), 400
+
 
     # Verify user belongs to the couple
     user_id = get_jwt_identity()
@@ -410,9 +682,16 @@ def get_scenarios():
 
 @api.route('/couples/<int:couple_id>/scenarios', methods=['POST'])
 @jwt_required()
+@validate_request_size(max_size_mb=3)
+@validate_json_structure()
 def accept_scenario(couple_id):
     data = request.get_json()
     scenario_id = data['scenario_id']
+
+
+    scenario_id, error = validate_id_int(scenario_id, "mission id")
+    if error:
+        return jsonify({'error': error}), 400
 
     # Verify user belongs to the couple
     user_id = get_jwt_identity()
@@ -427,20 +706,76 @@ def accept_scenario(couple_id):
     return jsonify({'message': 'scenario accepted'}), 201
 
 
+@api.route('/challenges/<int:challenge_id>', methods=['DELETE'])
+@jwt_required()
+@validate_request_size(max_size_mb=3)
+def delete_challenge(challenge_id):
+    user_id = get_jwt_identity()
+    user = User.query.get(user_id)
+    couple_id = user.couple_id
+
+    challenge = Challenges.query.get(challenge_id)
+    if not challenge:
+        return jsonify({'error': 'Challenge not found'}), 404
+        
+    # Only allow deletion of user-created challenges
+    if challenge.created_by != couple_id:
+        return jsonify({'error': 'Unauthorized'}), 403
+
+    db.session.delete(challenge)
+    db.session.commit()
+    return jsonify({'message': 'Challenge deleted'}), 200
 
 
-"""
-def check_upload_limit(user_id):
-    from your_app.models import Image
-    current_count = Image.query.filter_by(user_id=user_id).count()
-    return current_count >= 50
+@api.route('/couples/<int:couple_id>/challenges/<int:challenge_id>', methods=['DELETE'])
+@jwt_required()
+@validate_request_size(max_size_mb=3)
+def unlike_challenge(couple_id, challenge_id):
+    user_id = get_jwt_identity()
+    user = User.query.get(user_id)
+    if user.couple_id != couple_id:
+        return jsonify({'error': 'Unauthorized'}), 403
 
-"""
+    entry = CoupleChallenges.query.filter_by(
+        couple_id=couple_id, 
+        challenges_id=challenge_id
+    ).first()
+    
+    if not entry:
+        return jsonify({'error': 'Entry not found'}), 404
+
+    db.session.delete(entry)
+    db.session.commit()
+    return jsonify({'message': 'Challenge unliked'}), 200
 
 
-#use when user clicks on start now?
+@api.route('/couples/<int:couple_id>/scenarios/<int:scenario_id>', methods=['DELETE'])
+@jwt_required()
+@validate_request_size(max_size_mb=3)
+def unlike_scenario(couple_id, scenario_id):
+    user_id = get_jwt_identity()
+    user = User.query.get(user_id)
+    if user.couple_id != couple_id:
+        return jsonify({'error': 'Unauthorized'}), 403
+
+    entry = CoupleScenario.query.filter_by(
+        couple_id=couple_id, 
+        scenario_id=scenario_id
+    ).first()
+    
+    if not entry:
+        return jsonify({'error': 'Entry not found'}), 404
+
+    db.session.delete(entry)
+    db.session.commit()
+    return jsonify({'message': 'Scenario unliked'}), 200
+
+
+# notebook routes
+
 @api.route('/story/start', methods=['POST'])
 @jwt_required()
+@validate_request_size(max_size_mb=3)
 def start_story():
     user = User.query.get(get_jwt_identity())
     couple = user.couple
@@ -460,7 +795,6 @@ def start_story():
     }), 200
 
 
-#use when the user opens the sheet of the story book view, gets automatically called this function?
 @api.route('/story/status', methods=['GET'])
 @jwt_required()
 def get_story_status():
@@ -480,33 +814,56 @@ def get_story_status():
         'completed_pages': completed_pages
     }), 200
 
-# this is used when a page (one page then in the frontedn should contain two challenges)?
 
 @api.route('/story/progress', methods=['POST'])
 @jwt_required()
+@validate_request_size(max_size_mb=3)
+@validate_json_structure()
 def update_progress():
     user = User.query.get(get_jwt_identity())
     couple = user.couple
     data = request.get_json()
 
     # Validate required fields
+
     page_number = data.get('page_number')
-    if page_number is None:
-        return jsonify({'error': 'page_number is required'}), 400
+    page_number, error = validate_id_int(page_number, "page number")
+    if error:
+        return jsonify({'error' : error}), 400
 
     # Find existing progress or create new
     existing_progress = StoryProgress.query.filter_by(
         couple_id=couple.id,
         page_number=page_number
     ).first()
-
+    print(existing_progress)
     if existing_progress:
         # Update existing entry
-        existing_progress.fun_level = data.get('fun_level', existing_progress.fun_level)
-        existing_progress.comments = data.get('comments', existing_progress.comments)
+        fun_level = data.get('fun_level', existing_progress.fun_level)
+        fun_level, error = validate_id_int(fun_level, "fun level")
+        if error:
+            return jsonify({'error' : error}), 400
+        
+        comments =  data.get('comments', existing_progress.comments)
+        comments, error = validate_comments(comments)
+        if error:
+            return jsonify({'error' : error}), 400        
+        
+        existing_progress.fun_level = fun_level
+        existing_progress.comments = comments
         existing_progress.completed_at = datetime.now()
     else:
         # Create new entry
+        fun_level = data.get('fun_level')
+        fun_level, error = validate_id_int(fun_level, "fun level")
+        if error:
+            return jsonify({'error' : error}), 400
+        
+        comments =  data.get('comments')
+        comments, error = validate_comments(comments)
+        if error:
+            return jsonify({'error' : error}), 400      
+        
         new_progress = StoryProgress(
             couple_id=couple.id,
             page_number=page_number,

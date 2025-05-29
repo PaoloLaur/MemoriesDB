@@ -8,60 +8,7 @@ import uuid
 db = SQLAlchemy()
 bcrypt = Bcrypt()
 
-"""
-what is needed?
 
-user 
-
-    id not nullable
-    username not nullable
-    password #be hashed not nullable
-    couple_id # sent fromm the frontend after a user registrates not nullable
-    couple # this is a relationship with the class Couple, backref is users not nullable 
-
-    date of relationship ?
-
-    selected_missions_list (with some reference to couple id to fetch them for both users)
-    selected_spicy_activities (with some reference to couple id to fetch them for both users) 
-
-    discarded_missions ?
-    discarded_spicy_activities ?
-
-
-
-
-couple
-
-    id
-    level
-    what else?
-
-
-notebook 
-    id primary key which should be the same as the couple one
-    date = date model, which has the values for each 'page in it'
-
-    for each data there are 
-        comments = [] up to two values inside the list, each comment has an id (which is the one of the user which posted it)
-        media = [] up to two urls values inside the list, each media has an id (which is the one of the user which posted it)
-
-missions 
-    id
-    missions = not nullable, a list of strings (missions)
-    user_id if one of the two users created it 
-    
-
-spicy
-    id
-    spicy_activities = not nullable, a list of strings (activities)
-    scenarios = not nullable, a list of strings (scenarios)
-    user_id if one of the two users created it 
-
-
-
-    
-
-"""
 
 class User(db.Model):
     __tablename__ = 'users' # what is this?? what properties does __tablename__ have?
@@ -153,8 +100,8 @@ class Mission(db.Model):
 class CoupleMission(db.Model):
     __tablename__ = 'couples_missions'
     id = db.Column(db.Integer, primary_key=True)
-    couple_id = db.Column(db.Integer, db.ForeignKey('couples.id'), nullable=False)
-    mission_id = db.Column(db.Integer, db.ForeignKey('missions.id'), nullable=False)
+    couple_id = db.Column(db.Integer, db.ForeignKey('couples.id', ondelete='CASCADE'), nullable=False) 
+    mission_id = db.Column(db.Integer, db.ForeignKey('missions.id', ondelete='CASCADE'), nullable=False)  
     accepted_at = db.Column(db.DateTime, default=datetime.now)
 
 
@@ -173,8 +120,8 @@ class Challenges(db.Model):
 class CoupleChallenges(db.Model):
     __tablename__ = 'couple_challenges'
     id = db.Column(db.Integer, primary_key=True)
-    couple_id = db.Column(db.Integer, db.ForeignKey('couples.id'), nullable=False)
-    challenges_id = db.Column(db.Integer, db.ForeignKey('challenges.id'), nullable=False)
+    couple_id = db.Column(db.Integer, db.ForeignKey('couples.id', ondelete='CASCADE') , nullable=False)
+    challenges_id = db.Column(db.Integer, db.ForeignKey('challenges.id', ondelete='CASCADE'),  nullable=False)
     accepted_at = db.Column(db.DateTime, default=datetime.now)
 
 
