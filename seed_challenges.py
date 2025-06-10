@@ -1,64 +1,129 @@
 from datetime import datetime
 
 precreated_challenges = [
+    # EASY
     {
-        "content": "Spicy Dance-Off: Have a 3-minute dance battle where you try to out-seduce each other using only body movements",
+        "content": "Slow Dance in Your Underwear: put on a song and dance together just the two of you.",
         "category": "Light"
     },
     {
-        "content": "Sensory Blackout: Feed each other mystery foods blindfolded and guess what they are",
+        "content": "Kiss for 30 seconds in every room of your home (yes, even the hallway).",
         "category": "Light"
     },
     {
-        "content": "Role Reversal Quiz: Answer intimate questions while pretending to be each other",
+        "content": "Take turns showing your partner where you love being touched (hands and mouth only).",
         "category": "Light"
     },
     {
-        "content": "Tension Tower: Build a tower of objects using only your mouths (start with light snacks like crackers)",
+        "content": "Set a 5-minute timer and do nothing but turning on each other — no distractions, no multitasking.",
         "category": "Light"
     },
     {
-        "content": "Memory Lane: Recreate your first date... with exaggerated romantic clichés",
+        "content": "Go out on a date and whisper naughty things in your partner’s ear and watch their reaction.",
         "category": "Light"
     },
     {
-        "content": "Whisper Challenge: Describe your fantasies using only single-word hints while loud music plays",
+        "content": "Lock eyes for one full minute and then act on the first feeling that comes up.",
+        "category": "Light"
+    },
+    {
+        "content": "Send a playful dare to your partner over text, then complete it before the night ends.",
+        "category": "Light"
+    },
+    {
+        "content": "Recreate a makeout scene from your favorite movie — costumes optional!",
+        "category": "Light"
+    },
+    {
+        "content": "Take a warm bath or shower together. Soap each other up slowly.",
+        "category": "Light"
+    },
+    {
+        "content": "Pick only one item from each other’s wardrobe and wear it, even if just for laughs.",
+        "category": "Light"
+    },
+
+    # MEDIUM
+    {
+        "content": "One partner wears a blindfold while the other uses gentle touch to...",
         "category": "Medium"
     },
     {
-        "content": "Sync or Swim: Attempt to mirror each other's movements perfectly for 5 minutes straight",
+        "content": "Each of you choose 3 songs to a shared playlist, then let the music guide your next hour... be creative!",
         "category": "Medium"
     },
     {
-        "content": "Sensual Sketch: Draw portraits of each other using only non-dominant hands",
+        "content": "Lie very close together but resist touching. Whoever gives in first has to do something for the other...",
         "category": "Medium"
     },
     {
-        "content": "Temperature Play: Exchange massages using alternating hot/cold items (safety first!)",
+        "content": "Talk for at least 15 minutes about what you would like your partner to do during intimate time... then recreate it.",
         "category": "Medium"
     },
     {
-        "content": "Eye Contact Marathon: Maintain unbroken eye contact while asking increasingly personal questions",
+        "content": "Private Photoshoot: take pictures of each other, only if you feel comfortable, to be shared only between you two.",
         "category": "Medium"
     },
     {
-        "content": "Fantasy Charades: Act out secret desires without using words",
+        "content": "Use ice cubes to explore each others... passions",
+        "category": "Medium"
+    },
+    {
+        "content": "One of you takes full control. The goal? Arouse your partner as much as possible, but don’t let them finish... at least not right away.",
+        "category": "Medium"
+    },
+    {
+        "content": "Find a spicy story online. One reads aloud slowly while the other listens, and acts, accordingly...",
+        "category": "Medium"
+    },
+    {
+        "content": "Write body parts and spicy actions on paper, roll dices and obey to who wins each round.",
+        "category": "Medium"
+    },
+    {
+        "content": "One partner sits. The other asks sensual questions. If the seated person skips a question, they have to open their mouths for 1 minute and...",
+        "category": "Medium"
+    },
+
+    # HARD
+    {
+        "content": "Text your partner instructions before you meet them later. They must follow it without explanation.",
         "category": "Hard"
     },
     {
-        "content": "Breathing Sync: Match your breathing patterns while sitting back-to-back",
+        "content": "Use a soft scarf or tie to limit your partner's movement, and...",
         "category": "Hard"
     },
     {
-        "content": "Scent Memory: Create custom perfumes/oils for each other using household items",
+        "content": "Bring whipped cream, chocolate syrup, or honey to the bedroom. Choose a “canvas” and decorate — then slowly clean up...",
         "category": "Hard"
     },
     {
-        "content": "Kiss Catalogue: Invent 5 new types of kisses and name them together",
+        "content": "Give each other a secret task to perform discreetly in public... don't get caught!",
         "category": "Hard"
     },
     {
-        "content": "Future Fantasy: Describe your ideal day together 10 years from now in vivid detail",
+        "content": "Get in front of a large mirror and... watch yourselves.",
+        "category": "Hard"
+    },
+    {
+        "content": "Create a DIY strip game. Each round lost, remove a piece of clothing or do a sexy challenge.",
+        "category": "Hard"
+    },
+    {
+        "content": "One of you becomes the \"boss\" for the evening: giving orders, setting the pace, and deciding when (or if) the other is allowed to take control.",
+        "category": "Hard"
+    },
+    {
+        "content": "Choose a fantasy or kink you’ve both talked about but haven’t tried... and bring it to life (with trust and consent).",
+        "category": "Hard"
+    },
+    {
+        "content": "Each gets 3 sexy wishes for the night. No questions asked (within boundaries).",
+        "category": "Hard"
+    },
+    {
+        "content": "Pretend you're strangers meeting at a bar and take it from there; you'll respect each other less and be mriskier...",
         "category": "Hard"
     }
 ]
@@ -67,7 +132,6 @@ def seed_challenges(app, db):
     with app.app_context():
         from models import Challenges  # Local import to avoid circular dependency
         
-        # Only seed if no precreated challenges exist
         if not Challenges.query.filter_by(is_precreated=True).first():
             challenges_to_add = [
                 Challenges(

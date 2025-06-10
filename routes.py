@@ -1,22 +1,15 @@
-from flask import Blueprint, request, jsonify, session
+from flask import Blueprint, request, jsonify, current_app
 from models import db, User, Couple, Mission, CoupleMission, CoupleChallenges, Scenario, Challenges, CoupleScenario, StoryProgress, bcrypt
 import re  
 from flask_jwt_extended import create_access_token, create_refresh_token
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from datetime import datetime, timedelta
+from datetime import datetime
 from google.oauth2 import id_token
 from google.auth.transport import requests
 import os
 from functools import wraps
-import html
-from datetime import datetime, timedelta
 import logging
-
-#TODO:
-# REDIS PER RATE LIMITING
-# ID FOR EACH REQUEST TO BE SHOWN IN THE LOGS
-
-
+from flask_limiter import Limiter
 
 
 api = Blueprint('api', __name__)
@@ -30,6 +23,8 @@ security_logger = logging.getLogger('security')
 security_handler = logging.FileHandler('security.log')
 security_handler.setLevel(logging.WARNING)
 security_logger.addHandler(security_handler)
+
+
 
 def log_security_event(user_id, event_type, details):
     """Log security-related events"""
@@ -136,8 +131,35 @@ def validate_id_int(id, field_name):
     
     return id, None
 
+def get_limiter():
+    if 'limiter' not in current_app.extensions:
+        return None
+    limiter_ext = current_app.extensions['limiter']
+    
+    if isinstance(limiter_ext, dict) and limiter_ext:
+        print("here 1")
+        print(limiter_ext)
+        return next(iter(limiter_ext.values()))
+    elif isinstance(limiter_ext, set) and limiter_ext:
+        print("here 2")
 
+        print(limiter_ext)
+        return next(iter(limiter_ext))
+    return None
 
+def rate_limit(limit_string):
+    """Decorator to apply rate limits to routes"""
+    def decorator(f):
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            limiter = get_limiter()
+            if limiter:
+                # Create a new decorated function with the rate limit applied
+                limited_function = limiter.limit(limit_string)(f)
+                return limited_function(*args, **kwargs)
+            return f(*args, **kwargs)
+        return decorated_function
+    return decorator
 
 
 # ------------------------------------------------
@@ -148,6 +170,7 @@ def validate_id_int(id, field_name):
 @api.route('/auth/google/register', methods=['POST'])
 @validate_request_size(max_size_mb=3)
 @validate_json_structure()
+@rate_limit("30 per minute")  # 30 mission acceptances per minute per user
 def google_register():
     data = request.get_json()
     id_token_str = data.get('token')
@@ -251,6 +274,7 @@ def google_register():
 @api.route('/auth/google/login', methods=['POST'])
 @validate_request_size(max_size_mb=3)
 @validate_json_structure()
+@rate_limit("30 per minute")
 def google_login():
     id_token_str = request.get_json().get('token')
     try:
@@ -275,6 +299,7 @@ def google_login():
 @api.route('/users/delete', methods=['DELETE'])
 @jwt_required()
 @validate_request_size(max_size_mb=3)
+@rate_limit("5 per minute")
 def delete_user():
     try:
         user_id = get_jwt_identity()
@@ -353,6 +378,7 @@ def delete_user():
 
 @api.route('/couple', methods=['GET'])
 @jwt_required()
+@rate_limit("15 per minute")
 def get_couple_details():
     try:
   
@@ -384,7 +410,8 @@ def get_couple_details():
 @api.route('/refresh', methods=['POST'])
 @jwt_required(refresh=True)  # This validates the refresh token
 @validate_request_size(max_size_mb=3)
-@validate_json_structure()
+#@validate_json_structure()
+@rate_limit("30 per minute")
 def refresh():
     try:
         current_user = get_jwt_identity()
@@ -401,6 +428,7 @@ def refresh():
 
 @api.route('/missions', methods=['GET'])
 @jwt_required()
+@rate_limit("15 per minute")
 def get_missions():
     user_id = get_jwt_identity()
     user = User.query.get(user_id)
@@ -429,6 +457,7 @@ def get_missions():
 @jwt_required()
 @validate_request_size(max_size_mb=3)
 @validate_json_structure()
+@rate_limit("10 per hour")
 def create_mission():
     data = request.get_json()
 
@@ -481,6 +510,7 @@ def create_mission():
 @jwt_required()
 @validate_request_size(max_size_mb=3)
 @validate_json_structure()
+@rate_limit("30 per minute")
 def accept_mission(couple_id):
     data = request.get_json()
 
@@ -507,6 +537,7 @@ def accept_mission(couple_id):
 @api.route('/missions/<int:mission_id>', methods=['DELETE'])
 @jwt_required()
 @validate_request_size(max_size_mb=3)
+@rate_limit("20 per minute")
 def delete_mission(mission_id):
     user_id = get_jwt_identity()
     user = User.query.get(user_id)
@@ -529,6 +560,7 @@ def delete_mission(mission_id):
 @api.route('/couples/<int:couple_id>/missions/<int:mission_id>', methods=['DELETE'])
 @jwt_required()
 @validate_request_size(max_size_mb=3)
+@rate_limit("30 per minute")
 def unlike_mission(couple_id, mission_id):
     user_id = get_jwt_identity()
     user = User.query.get(user_id)
@@ -551,6 +583,7 @@ def unlike_mission(couple_id, mission_id):
 
 @api.route('/challenges', methods=['GET'])
 @jwt_required()
+@rate_limit("10 per minute")
 def get_challenges():
     user_id = get_jwt_identity()
     user = User.query.get(user_id)
@@ -580,6 +613,7 @@ def get_challenges():
 @jwt_required()
 @validate_request_size(max_size_mb=3)
 @validate_json_structure()
+@rate_limit("10 per hour")
 def create_challenges():
     data = request.get_json()
 
@@ -629,6 +663,7 @@ def create_challenges():
 @jwt_required()
 @validate_request_size(max_size_mb=3)
 @validate_json_structure()
+@rate_limit("30 per minute")
 def accept_challenges(couple_id):
     data = request.get_json()
     challenges_id = data['challenges_id']
@@ -653,6 +688,7 @@ def accept_challenges(couple_id):
 
 @api.route('/scenarios', methods=['GET'])
 @jwt_required()
+@rate_limit("30 per minute")
 def get_scenarios():
     try:
         user_id = get_jwt_identity()
@@ -684,6 +720,7 @@ def get_scenarios():
 @jwt_required()
 @validate_request_size(max_size_mb=3)
 @validate_json_structure()
+@rate_limit("30 per minute")
 def accept_scenario(couple_id):
     data = request.get_json()
     scenario_id = data['scenario_id']
@@ -709,6 +746,7 @@ def accept_scenario(couple_id):
 @api.route('/challenges/<int:challenge_id>', methods=['DELETE'])
 @jwt_required()
 @validate_request_size(max_size_mb=3)
+@rate_limit("20 per minute")
 def delete_challenge(challenge_id):
     user_id = get_jwt_identity()
     user = User.query.get(user_id)
@@ -730,6 +768,7 @@ def delete_challenge(challenge_id):
 @api.route('/couples/<int:couple_id>/challenges/<int:challenge_id>', methods=['DELETE'])
 @jwt_required()
 @validate_request_size(max_size_mb=3)
+@rate_limit("30 per minute")
 def unlike_challenge(couple_id, challenge_id):
     user_id = get_jwt_identity()
     user = User.query.get(user_id)
@@ -752,6 +791,7 @@ def unlike_challenge(couple_id, challenge_id):
 @api.route('/couples/<int:couple_id>/scenarios/<int:scenario_id>', methods=['DELETE'])
 @jwt_required()
 @validate_request_size(max_size_mb=3)
+@rate_limit("30 per minute")
 def unlike_scenario(couple_id, scenario_id):
     user_id = get_jwt_identity()
     user = User.query.get(user_id)
@@ -776,6 +816,7 @@ def unlike_scenario(couple_id, scenario_id):
 @api.route('/story/start', methods=['POST'])
 @jwt_required()
 @validate_request_size(max_size_mb=3)
+@rate_limit("30 per minute")
 def start_story():
     user = User.query.get(get_jwt_identity())
     couple = user.couple
@@ -797,6 +838,7 @@ def start_story():
 
 @api.route('/story/status', methods=['GET'])
 @jwt_required()
+@rate_limit("30 per minute")
 def get_story_status():
     user = User.query.get(get_jwt_identity())
     couple = user.couple
@@ -819,6 +861,7 @@ def get_story_status():
 @jwt_required()
 @validate_request_size(max_size_mb=3)
 @validate_json_structure()
+@rate_limit("30 per minute")
 def update_progress():
     user = User.query.get(get_jwt_identity())
     couple = user.couple

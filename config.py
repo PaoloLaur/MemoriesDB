@@ -14,3 +14,12 @@ class Config:
     JWT_HEADER_TYPE = 'Bearer' 
     JWT_COOKIE_CSRF_PROTECT = False  # Disables CSRF protection for cookies
     JWT_CSRF_CHECK_FORM = False      # Disables CSRF checks in form submissions
+    REDIS_HOST = os.getenv('REDIS_HOST', 'localhost')
+    REDIS_PORT = int(os.getenv('REDIS_PORT', 6379))
+    REDIS_DB = int(os.getenv('REDIS_DB', 0))
+    REDIS_PASSWORD = os.getenv('REDIS_PASSWORD', None)
+    
+    # Rate Limiting Configuration
+    RATELIMIT_STORAGE_URL = f"redis://{REDIS_HOST}:{REDIS_PORT}/{REDIS_DB}"
+    if REDIS_PASSWORD:
+        RATELIMIT_STORAGE_URL = f"redis://:{REDIS_PASSWORD}@{REDIS_HOST}:{REDIS_PORT}/{REDIS_DB}"

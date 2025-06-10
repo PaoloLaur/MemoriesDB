@@ -6,14 +6,46 @@ from models import db, bcrypt
 from routes import api as api_blueprint
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
-from flask_jwt_extended import JWTManager
+from flask_jwt_extended import JWTManager, get_jwt_identity, jwt_required
 from seed_missions import seed_missions
 from seed_challenges import seed_challenges
 from seed_scenarios import seed_scenarios
 import os 
+import redis
+
+def get_user_id():
+    """Custom key function for rate limiting based on user_id"""
+    try:
+        # Try to get user_id from JWT token
+        user_id = get_jwt_identity()
+        if user_id:
+            return f"user:{user_id}"
+        else:
+            # Fallback to IP address for unauthenticated requests
+            return f"ip:{get_remote_address()}"
+    except:
+        # If JWT is not available, use IP address
+        return f"ip:{get_remote_address()}"
 
 
-limiter = Limiter(key_func=get_remote_address)
+
+def build_redis_uri():
+    host = os.getenv('REDIS_HOST', 'localhost')
+    port = int(os.getenv('REDIS_PORT', 6379))
+    db = int(os.getenv('REDIS_DB', 0))
+    password = os.getenv('REDIS_PASSWORD', None)
+    
+    if password:
+        return f"redis://:{password}@{host}:{port}/{db}"
+    else:
+        return f"redis://{host}:{port}/{db}"
+
+# Initialize limiter with proper Redis storage and custom key function
+limiter = Limiter(
+    key_func=get_user_id,
+    storage_uri=build_redis_uri(),
+    default_limits=["3000 per hour"]
+)
 
 def create_app():
 
@@ -39,7 +71,22 @@ def create_app():
     })
      # a flask extension, allows for cross origin resource sharing. In produciton origins should be either restricted or recondidered
     limiter.init_app(app)
-    limiter.default_limits = ["10800 per hour"] 
+    
+    # Test Redis connection
+    try:
+        # Create Redis client for testing
+        redis_client = redis.Redis(
+            host=os.getenv('REDIS_HOST', 'localhost'),
+            port=int(os.getenv('REDIS_PORT', 6379)),
+            db=int(os.getenv('REDIS_DB', 0)),
+            password=os.getenv('REDIS_PASSWORD', None),
+            decode_responses=True
+        )
+        redis_client.ping()
+        print("✅ Redis connection successful")
+    except redis.ConnectionError as e:
+        print(f"❌ Redis connection failed: {e}")
+        print("Rate limiting will fall back to in-memory storage")
 
 
     db.init_app(app)
@@ -55,7 +102,8 @@ def create_app():
         print(f"{rule} ({', '.join(rule.methods)})")
     print("========================\n")
 
-
+    print(f"Limiter instances: {app.extensions['limiter']}")
+    print(f"Number of limiters: {len(app.extensions['limiter'])}")
     return app
 
 app = create_app()
