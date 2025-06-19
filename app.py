@@ -12,6 +12,8 @@ from seed_challenges import seed_challenges
 from seed_scenarios import seed_scenarios
 import os 
 import redis
+from flask_migrate import Migrate
+
 
 def get_user_id():
     """Custom key function for rate limiting based on user_id"""
@@ -92,6 +94,9 @@ def create_app():
     db.init_app(app)
     bcrypt.init_app(app)
 
+    migrate = Migrate(app, db) 
+
+
     # here register blueprints 
     app.register_blueprint(api_blueprint, url_prefix='/api')
 
@@ -117,10 +122,7 @@ if __name__ == '__main__': # Ensuring code only runs when executing the file dir
     logging.basicConfig(level=logging.DEBUG) # dangerous in prod,change to logging.INFO
 
     with app.app_context():
-        #db.drop_all()  # REMOVE BEFORE PROD
-
-        db.create_all() # with app.app_context is needed otherwise sqlalchemy doesnt know which config to use for db connections, creates all database tables based on your SQLAlchemy models. Don't use in prod, use either alembic or flask migration
-
+        
         seed_missions(app, db)
 
         seed_challenges(app, db)
