@@ -10,7 +10,7 @@ from datetime import datetime
 
 """
 # In Railway dashboard -> your service -> Connect tab
-export FLASK_APP=app_test.py
+export FLASK_APP=app.py
 
 flask init-db
 flask seed-all
@@ -25,7 +25,7 @@ flask seed-missions  # Only adds new ones!
 """
 
 # Initialize database
-export FLASK_APP=app_test.py
+export FLASK_APP=app.py
 
 flask init-db
 
