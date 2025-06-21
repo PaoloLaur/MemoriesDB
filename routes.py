@@ -137,13 +137,8 @@ def get_limiter():
     limiter_ext = current_app.extensions['limiter']
     
     if isinstance(limiter_ext, dict) and limiter_ext:
-        print("here 1")
-        print(limiter_ext)
         return next(iter(limiter_ext.values()))
     elif isinstance(limiter_ext, set) and limiter_ext:
-        print("here 2")
-
-        print(limiter_ext)
         return next(iter(limiter_ext))
     return None
 
@@ -174,7 +169,6 @@ def rate_limit(limit_string):
 def google_register():
     data = request.get_json()
     id_token_str = data.get('token')
-    print(id_token_str)
     
     # Verify token first
     try:
@@ -182,7 +176,6 @@ def google_register():
         if idinfo['aud'] != CLIENT_ID:
             return jsonify({'error': 'Invalid token'}), 401
         email = idinfo['email']
-        print(email)
     except ValueError as e:
         return jsonify({'error': str(e)}), 402
 
@@ -304,24 +297,18 @@ def delete_user():
     try:
         user_id = get_jwt_identity()
         user = User.query.get(user_id)
-        print(f"User: {user}")
         
         if not user:
             return jsonify({'error': 'User not found'}), 404
         
         couple = Couple.query.get(user.couple_id)
-        print(f"Couple: {couple}")
-        print(f"User ID: {user.id}")
-        
+    
         # Get all user-created content first
         user_missions = Mission.query.filter_by(created_by=user.id).all()
-        print(f"User missions: {user_missions}")
         
         user_challenges = Challenges.query.filter_by(created_by=user.id).all()
-        print(f"User challenges: {user_challenges}")
         
         user_scenarios = Scenario.query.filter_by(created_by=user.id).all()
-        print(f"User scenarios: {user_scenarios}")
         
         # Delete dependent records first
         # 1. Handle Missions
@@ -344,14 +331,12 @@ def delete_user():
         
         # Check remaining users BEFORE deleting current user
         remaining_users_count = User.query.filter_by(couple_id=couple.id).filter(User.id != user.id).count()
-        print(f"Remaining users after deletion: {remaining_users_count}")
         
         # Delete the user
         db.session.delete(user)
         
         # If this was the last user in the couple, delete the couple and related data
         if remaining_users_count == 0:
-            print("Deleting couple and related data...")
             
             # Delete all couple's accepted content (regardless of who created it)
             CoupleMission.query.filter_by(couple_id=couple.id).delete()
@@ -366,7 +351,6 @@ def delete_user():
         
         # Commit all changes
         db.session.commit()
-        print("Successfully deleted user and related data")
         
         return jsonify({'message': 'Account deleted successfully'}), 200
         
@@ -479,7 +463,6 @@ def create_mission():
     # Query the database to count missions created by this couple
     existing_mission_count = Mission.query.filter_by(created_by=couple_id).count()
 
-    print(existing_mission_count)
 
     # Check if the count is more than 20
     if existing_mission_count > 20:
@@ -635,7 +618,6 @@ def create_challenges():
     # Query the database to count missions created by this couple
     existing_challenges_count = Challenges.query.filter_by(created_by=couple_id).count()
 
-    print(existing_challenges_count)
 
     # Check if the count is more than 20
     if existing_challenges_count > 4:
@@ -879,7 +861,7 @@ def update_progress():
         couple_id=couple.id,
         page_number=page_number
     ).first()
-    print(existing_progress)
+
     if existing_progress:
         # Update existing entry
         fun_level = data.get('fun_level', existing_progress.fun_level)

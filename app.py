@@ -7,125 +7,99 @@ from routes import api as api_blueprint
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from flask_jwt_extended import JWTManager, get_jwt_identity, jwt_required
-from seed_missions import seed_missions
-from seed_challenges import seed_challenges
-from seed_scenarios import seed_scenarios
+from commands import register_commands  # Import our commands
 import os 
 import redis
 from flask_migrate import Migrate
+from urllib.parse import urlparse
 
 
 def get_user_id():
     """Custom key function for rate limiting based on user_id"""
     try:
-        # Try to get user_id from JWT token
         user_id = get_jwt_identity()
         if user_id:
             return f"user:{user_id}"
         else:
-            # Fallback to IP address for unauthenticated requests
             return f"ip:{get_remote_address()}"
     except:
-        # If JWT is not available, use IP address
         return f"ip:{get_remote_address()}"
 
 
 
-def build_redis_uri():
-    host = os.getenv('REDIS_HOST', 'localhost')
-    port = int(os.getenv('REDIS_PORT', 6379))
-    db = int(os.getenv('REDIS_DB', 0))
-    password = os.getenv('REDIS_PASSWORD', None)
-    
-    if password:
-        return f"redis://:{password}@{host}:{port}/{db}"
-    else:
-        return f"redis://{host}:{port}/{db}"
+REDIS_URL = os.getenv('REDIS_URL')
 
-# Initialize limiter with proper Redis storage and custom key function
+
+# Initialize limiter
 limiter = Limiter(
     key_func=get_user_id,
-    storage_uri=build_redis_uri(),
+    storage_uri=REDIS_URL,
     default_limits=["3000 per hour"]
 )
 
+
 def create_app():
-    app = Flask(__name__) # __name__ variable that takes the name of the file (in this case app.py)
-    app.config.from_object(Config) # from_object is safe, allows for configuring the flask application from the Config class
+    app = Flask(__name__)
+    app.config.from_object(Config)
+    
+    # Set logging level based on environment
+    if os.getenv('FLASK_ENV') == 'PRODUCTION':
+        logging.basicConfig(level=logging.INFO)
+    else:
+        logging.basicConfig(level=logging.DEBUG)
 
-    jwt = JWTManager(app) 
-
+    # Initialize extensions
+    jwt = JWTManager(app) # uses JWT_SECRET_KEY from config
+    db.init_app(app)
+    bcrypt.init_app(app)
+    migrate = Migrate(app, db)
+    limiter.init_app(app)
+    
+    # Register CLI commands
+    register_commands(app)
 
     @jwt.invalid_token_loader
     def handle_invalid_token(error):
-        print(f"❌ Invalid token: {error}")
         return jsonify({"error": "Invalid token"}), 401
 
     CORS(app, resources={
-        r"/api/*": {
-            "origins": "*",  # Never use origins="*" in production - specify exact domains
+    r"/api/*": {
+        "origins": "*",
+        "supports_credentials": True,
+        "allow_headers": ["Content-Type", "Authorization"]
+    }})
 
-            "supports_credentials": True,
-            "allow_headers": ["Content-Type", "Authorization"]
-        }
-    })
-     # a flask extension, allows for cross origin resource sharing. In produciton origins should be either restricted or recondidered
-    limiter.init_app(app)
-    
-    # Test Redis connection
+    # Test Redis connection using REDIS_URL
     try:
-        # Create Redis client for testing
-        redis_client = redis.Redis(
-            host=os.getenv('REDIS_HOST', 'localhost'),
-            port=int(os.getenv('REDIS_PORT', 6379)),
-            db=int(os.getenv('REDIS_DB', 0)),
-            password=os.getenv('REDIS_PASSWORD', None),
-            decode_responses=True
-        )
+        redis_url = os.getenv('REDIS_URL')
+        redis_client = redis.from_url(redis_url, decode_responses=True)
         redis_client.ping()
-        print("✅ Redis connection successful")
+        app.logger.info("✅ Redis connection successful")
     except redis.ConnectionError as e:
-        print(f"❌ Redis connection failed: {e}")
-        print("Rate limiting will fall back to in-memory storage")
-
-
-    db.init_app(app)
-    bcrypt.init_app(app)
-
-    migrate = Migrate(app, db) 
-
-
-    # here register blueprints 
+        app.logger.warning(f"❌ Redis connection failed: {e}")
+   
+   
+    # Register blueprints
     app.register_blueprint(api_blueprint, url_prefix='/api')
 
+    # Health check endpoint
+    @app.route('/health')
+    def health_check():
+        try:
+            # Test database
+            db.session.execute('SELECT 1')
+            
+            return jsonify({'status': 'healthy'}), 200
+        except Exception as e:
+            return jsonify({'status': 'unhealthy', 'error': str(e)}), 500
 
-    # After all routes are registered and before app.run()
-    print("\n=== REGISTERED ROUTES ===")
-    for rule in app.url_map.iter_rules():
-        print(f"{rule} ({', '.join(rule.methods)})")
-    print("========================\n")
-
-    print(f"Limiter instances: {app.extensions['limiter']}")
-    print(f"Number of limiters: {len(app.extensions['limiter'])}")
     return app
+
 
 app = create_app()
 
 
-
-# here start the app 
-
-if __name__ == '__main__': # Ensuring code only runs when executing the file directly (python app.py), not when imported as a module, never used in production deployments (WSGI servers like Gunicorn don't execute this block).
-
-    logging.basicConfig(level=logging.DEBUG) # dangerous in prod,change to logging.INFO
-
-    with app.app_context():
-        
-        seed_missions(app, db)
-
-        seed_challenges(app, db)
-        
-        seed_scenarios(app, db)
-    
-        app.run(host='0.0.0.0', port=5001, ssl_context='adhoc')  
-
+# Only run in development
+if __name__ == '__main__':
+    # This only runs during development
+    app.run(host='0.0.0.0', port=5001, debug=True, ssl_context='adhoc')
