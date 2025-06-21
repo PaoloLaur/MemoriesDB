@@ -50,8 +50,6 @@ limiter = Limiter(
 )
 
 def create_app():
-
-
     app = Flask(__name__) # __name__ variable that takes the name of the file (in this case app.py)
     app.config.from_object(Config) # from_object is safe, allows for configuring the flask application from the Config class
 
