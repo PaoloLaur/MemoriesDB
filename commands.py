@@ -9,7 +9,6 @@ from datetime import datetime
 # PRODUCTION NOTE:
 
 """
-# In Railway dashboard -> your service -> Connect tab
 export FLASK_APP=app.py
 
 flask init-db
