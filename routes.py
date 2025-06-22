@@ -464,9 +464,9 @@ def create_mission():
     existing_mission_count = Mission.query.filter_by(created_by=couple_id).count()
 
 
-    # Check if the count is more than 20
-    if existing_mission_count > 20:
-        return jsonify({'error': 'Forbidden - Maximum number of missions created (20) exceeded'}), 403
+    # Check if the count is more than 5
+    if existing_mission_count > 5:
+        return jsonify({'error': 'Forbidden - Maximum number of missions created (5) exceeded'}), 403
 
     # Proceed to create the new mission
     new_mission = Mission(
@@ -619,9 +619,9 @@ def create_challenges():
     existing_challenges_count = Challenges.query.filter_by(created_by=couple_id).count()
 
 
-    # Check if the count is more than 20
-    if existing_challenges_count > 4:
-        return jsonify({'error': 'Forbidden - Maximum number of challenges created (20) exceeded'}), 403
+    # Check if the count is more than 5
+    if existing_challenges_count > 5:
+        return jsonify({'error': 'Forbidden - Maximum number of challenges created (5) exceeded'}), 403
 
     new_challenges = Challenges(
         content=validated_content,
