@@ -69,7 +69,7 @@ precreated_challenges = [
         "category": "Medium"
     },
     {
-        "content": "One of you takes full control. The goal? Arouse your partner as much as possible, but don’t let them finish... at least not right away.",
+        "content": "One of you takes control. Arouse your partner as much as possible, but don’t let them finish... at least not right away.",
         "category": "Medium"
     },
     {
@@ -81,7 +81,7 @@ precreated_challenges = [
         "category": "Medium"
     },
     {
-        "content": "One partner sits. The other asks sensual questions. If the seated person skips a question, they have to open their mouths for 1 minute and...",
+        "content": "One partner sits. The other asks questions. If the person skips one, they have to open their mouths for 1 minute and...",
         "category": "Medium"
     },
 
@@ -111,7 +111,7 @@ precreated_challenges = [
         "category": "Hard"
     },
     {
-        "content": "One of you becomes the \"boss\" for the evening: giving orders, setting the pace, and deciding when (or if) the other is allowed to take control.",
+        "content": "One of you becomes the \"boss\" for the evening: giving orders, and deciding when (or if) the other is allowed to take control.",
         "category": "Hard"
     },
     {
