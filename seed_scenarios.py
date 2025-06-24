@@ -3,7 +3,7 @@ from datetime import datetime
 
 precreated_scenarios = [
     {
-        "setting": "Luxury Hotel Penthouse",
+        "setting": "Luxury Hotel",
         "roles": ["Mysterious Billionaire", "Curious Housekeeper"],
         "prompt": (
             "While cleaning the room, the housekeeper finds a naughty invitation hidden under the pillow, daring them to explore. "
@@ -35,7 +35,7 @@ precreated_scenarios = [
         "time": "8:30 PM"
     },
     {
-        "setting": "Art Gallery After Hours",
+        "setting": "Late Art Gallery",
         "roles": ["Bold Artist", "Muse in Disguise"],
         "prompt": (
             "The muse agrees to pose nude for a forbidden sketch. The artist must draw while resisting the urge to touch. "
@@ -77,7 +77,7 @@ precreated_scenarios = [
         "time": "12:00 AM"
     },
     {
-        "setting": "High-Stakes Poker Night",
+        "setting": "Poker Night",
         "roles": ["Card Shark", "Dealer with Secrets"],
         "prompt": (
             "Every round of poker, someone loses a piece of clothing. But more than chips are on the line. "
@@ -87,7 +87,7 @@ precreated_scenarios = [
         "time": "10:30 PM"
     },
     {
-        "setting": "Rainy Night Taxi Ride",
+        "setting": "Taxi Ride",
         "roles": ["Confident Driver", "Mysterious Passenger"],
         "prompt": (
             "The passenger gets in late at night. The driver offers a ride with a twist — for each stoplight, they must answer an intimate question. "
