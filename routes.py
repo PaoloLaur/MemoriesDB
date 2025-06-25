@@ -496,13 +496,11 @@ def create_mission():
 @rate_limit("30 per minute")
 def accept_mission(couple_id):
     data = request.get_json()
-
     mission_id = data['mission_id']
 
     mission_id, error = validate_id_int(mission_id, "mission id")
     if error:
         return jsonify({'error': error}), 400
-
 
     # Verify user belongs to the couple
     user_id = get_jwt_identity()
@@ -510,11 +508,38 @@ def accept_mission(couple_id):
     if user.couple_id != couple_id:
         return jsonify({'error': 'Unauthorized'}), 403
 
-    new_entry = CoupleMission(couple_id=couple_id, mission_id=mission_id)
-    db.session.add(new_entry)
-    db.session.commit()
+    try:
+        # Check if already exists
+        existing = CoupleMission.query.filter_by(
+            couple_id=couple_id, 
+            mission_id=mission_id
+        ).first()
+        
+        if existing:
+            print(f"Mission {mission_id} already accepted by couple {couple_id}")
+            return jsonify({'message': 'Mission already accepted'}), 200
 
-    return jsonify({'message': 'Mission accepted'}), 201
+        new_entry = CoupleMission(couple_id=couple_id, mission_id=mission_id)
+        db.session.add(new_entry)
+        db.session.commit()
+        
+        # Verify it was actually saved
+        verification = CoupleMission.query.filter_by(
+            couple_id=couple_id, 
+            mission_id=mission_id
+        ).first()
+        
+        if verification:
+            print(f"✅ Successfully saved mission {mission_id} for couple {couple_id}")
+        else:
+            print(f"❌ Failed to save mission {mission_id} for couple {couple_id}")
+            
+        return jsonify({'message': 'Mission accepted'}), 201
+        
+    except Exception as e:
+        db.session.rollback()
+        print(f"Error accepting mission: {str(e)}")
+        return jsonify({'error': str(e)}), 500
 
 
 @api.route('/missions/<int:mission_id>', methods=['DELETE'])
@@ -588,6 +613,9 @@ def get_challenges():
             'created_by': challenges.created_by,
             'accepted': challenges.id in accepted_challenges_ids
         })
+
+    print(f"Fetched {len(result)} challenges for couple {couple_id}")
+    print(challenges)
     
     return jsonify(result), 200
 
@@ -649,6 +677,7 @@ def create_challenges():
 def accept_challenges(couple_id):
     data = request.get_json()
     challenges_id = data['challenges_id']
+    print("user liked challenge:", challenges_id)
 
     challenges_id, error = validate_id_int(challenges_id, "mission id")
     if error:
@@ -660,6 +689,8 @@ def accept_challenges(couple_id):
     user = User.query.get(user_id)
     if user.couple_id != couple_id:
         return jsonify({'error': 'Unauthorized'}), 403
+    
+    print("setting new entry for couple:", couple_id, "challenge:", challenges_id)
 
     new_entry = CoupleChallenges(couple_id=couple_id, challenges_id=challenges_id)
     db.session.add(new_entry)
