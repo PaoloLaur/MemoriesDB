@@ -34,6 +34,7 @@ def get_user_id():
 REDIS_URL = os.getenv('REDIS_URL')
 
 
+
 # Initialize limiter
 limiter = Limiter(
     key_func=get_user_id,

@@ -123,7 +123,7 @@ precreated_challenges = [
         "category": "Hard"
     },
     {
-        "content": "Pretend you're strangers meeting at a bar and take it from there; you'll respect each other less and be mriskier...",
+        "content": "Pretend you're strangers meeting at a bar and take it from there; you'll respect each other less and be riskier...",
         "category": "Hard"
     }
 ]
